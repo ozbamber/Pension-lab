@@ -15,7 +15,7 @@ const documents = fs.readFileSync(path.join(root, 'document-extraction.js'), 'ut
 const app = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
 
 const stylesheetTag = '  <link rel="stylesheet" href="styles.css" />';
-const scriptsBlock = '  <script src="engine.js?v=20260819-docs2"></script>\n  <script src="financial-normalizer.js?v=20260819-docs2"></script>\n  <script src="payslip-parser.js?v=20260819-docs2"></script>\n  <script src="pension-report-parser.js?v=20260819-docs2"></script>\n  <script src="pension-input-reconciler.js?v=20260819-docs2"></script>\n  <script src="local-document-pipeline.js?v=20260819-docs2"></script>\n  <script src="document-extraction.js?v=20260819-docs2"></script>\n  <script src="app.js?v=20260819-docs2"></script>';
+const scriptsBlock = '  <script src="engine.js?v=20260819-docs3"></script>\n  <script src="financial-normalizer.js?v=20260819-docs3"></script>\n  <script src="payslip-parser.js?v=20260819-docs3"></script>\n  <script src="pension-report-parser.js?v=20260819-docs3"></script>\n  <script src="pension-input-reconciler.js?v=20260819-docs3"></script>\n  <script src="local-document-pipeline.js?v=20260819-docs3"></script>\n  <script src="document-extraction.js?v=20260819-docs3"></script>\n  <script src="app.js?v=20260819-docs3"></script>';
 
 if (!html.includes(stylesheetTag) || !html.includes(scriptsBlock)) {
   throw new Error('index.html structure changed; standalone build markers were not found.');
