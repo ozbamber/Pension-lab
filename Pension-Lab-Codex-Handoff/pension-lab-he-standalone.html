@@ -1639,22 +1639,20 @@ main { width: min(1180px, calc(100% - 32px)); padding-top: 44px; }
 
   function parseManagementFeesFromTokens(input) {
     const tokens = P.tokensFromInput(input);
-    const output = {};
-    for (let index = 0; index < tokens.length; index += 1) {
-      const labelContext = tokens.slice(index, index + 3).map((token) => token.text).join(' ');
-      const directLabel = tokens[index].text;
-      const valueContext = tokens.slice(index, index + 8).map((token) => token.text).join(' ');
-      const percentages = percentageFragments(valueContext);
-      if (!percentages.length) continue;
-      const value = F.normalizeFinancialValue(percentages[0], { kind: 'rate' }).value;
-      if (value == null || value > 0.2) continue;
-      const directDeposit = containsAlias(directLabel, ALIASES.depositFee);
-      const directBalance = containsAlias(directLabel, ALIASES.balanceFee);
-      if (!output.depositManagementFeeRate && (directDeposit || (!directBalance && containsAlias(labelContext, ALIASES.depositFee)))) output.depositManagementFeeRate = { value, page: tokens[index].page };
-      if (!output.balanceManagementFeeRate && (directBalance || (!directDeposit && containsAlias(labelContext, ALIASES.balanceFee)))) output.balanceManagementFeeRate = { value, page: tokens[index].page };
-      if (output.depositManagementFeeRate && output.balanceManagementFeeRate) break;
-    }
-    return output;
+    const extract = (aliases) => {
+      for (let index = 0; index < tokens.length; index += 1) {
+        if (!containsAlias(tokens[index].text, aliases)) continue;
+        const valueContext = tokens.slice(index, index + 6).map((token) => token.text).join(' ');
+        const percentage = percentageFragments(valueContext)[0];
+        const value = F.normalizeFinancialValue(percentage, { kind: 'rate' }).value;
+        if (value != null && value <= 0.2) return { value, page: tokens[index].page };
+      }
+      return null;
+    };
+    return Object.fromEntries([
+      ['depositManagementFeeRate', extract(ALIASES.depositFee)],
+      ['balanceManagementFeeRate', extract(ALIASES.balanceFee)],
+    ].filter(([, value]) => value));
   }
 
   function countReportAnchors(text) {
