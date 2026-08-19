@@ -87,7 +87,16 @@
         <article class="review-item critical-item">
           <div class="review-item-heading"><div><h3>הסכום שכבר חסכת</h3><small>יתרה נוכחית בכל החיסכון שנכלל בתחזית.</small></div><b class="source-badge" data-source-for="currentBalance"></b></div>
           <label class="money-input large-input"><span>₪</span><input id="currentBalance" type="number" min="0" step="1000" inputmode="numeric" aria-label="יתרה נוכחית" aria-describedby="currentBalanceError" /></label>
+          <small id="balanceDateReview" class="calculation-note"></small>
           <p id="currentBalanceError" class="field-error hidden"></p>
+        </article>
+        <article class="review-item fee-review">
+          <div class="review-item-heading"><div><h3>דמי ניהול מכל הפקדה</h3><small>האחוז שנגבה מכל הפקדה חדשה.</small></div><b class="source-badge" data-source-for="depositFee"></b></div>
+          <strong id="depositFeeReview" class="review-value">—</strong>
+        </article>
+        <article class="review-item fee-review">
+          <div class="review-item-heading"><div><h3>דמי ניהול מהסכום שכבר חסכת</h3><small>האחוז שנגבה בכל שנה מהכסף שכבר נצבר.</small></div><b class="source-badge" data-source-for="balanceFee"></b></div>
+          <strong id="balanceFeeReview" class="review-value">—</strong>
         </article>
         <article class="review-item contribution-review">
           <div class="review-item-heading"><div><h3>הפקדות חודשיות</h3><small>אם אין נתון מהתלוש, אפשר לאשר את הנחות המערכת או לשנות אותן.</small></div><b class="source-badge" data-source-for="employeeContributionRate"></b></div>
@@ -169,11 +178,13 @@
     <section class="disclaimer"><strong>חשוב לדעת</strong><p>זו תחזית המבוססת על הנתונים וההנחות שמופיעים כאן. תשואות, שכר, אינפלציה, דמי ניהול, תנאי הפרישה והרגולציה יכולים להשתנות, ולכן התוצאה בפועל עשויה להיות שונה.</p><details><summary>איך החישוב עובד?</summary><p>המנוע מחשב הפקדות וצמיחה חודש אחר חודש, מנכה דמי ניהול, ממיר לשקלים של היום לפי האינפלציה ומחלק את הצבירה המשוערת במקדם הקצבה. זהו כלי לתרחישים ולא ייעוץ.</p></details></section>
   </main>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="engine.js"></script>
-  <script src="financial-normalizer.js"></script>
-  <script src="payslip-parser.js"></script>
-  <script src="local-document-pipeline.js"></script>
-  <script src="document-extraction.js"></script>
-  <script src="app.js"></script>
+  <script src="engine.js?v=20260819-docs2"></script>
+  <script src="financial-normalizer.js?v=20260819-docs2"></script>
+  <script src="payslip-parser.js?v=20260819-docs2"></script>
+  <script src="pension-report-parser.js?v=20260819-docs2"></script>
+  <script src="pension-input-reconciler.js?v=20260819-docs2"></script>
+  <script src="local-document-pipeline.js?v=20260819-docs2"></script>
+  <script src="document-extraction.js?v=20260819-docs2"></script>
+  <script src="app.js?v=20260819-docs2"></script>
 </body>
 </html>

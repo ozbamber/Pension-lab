@@ -97,7 +97,7 @@
     const digits = (text.match(/\d/g) || []).length;
     const anchors = kind === 'payslip' && root.PensionPayslipParser
       ? root.PensionPayslipParser.countPayslipAnchors(text)
-      : Number(/יתרה|דמי\s*ניהול|current\s*balance|annual\s*report/i.test(text));
+      : root.PensionReportParser ? root.PensionReportParser.countReportAnchors(text) : Number(/יתרה|דמי\s*ניהול|current\s*balance|annual\s*report/i.test(text));
     const printable = (text.match(/[\u0590-\u05ff\x20-\x7e]/g) || []).length;
     const printableRatio = text.length ? printable / text.length : 0;
     const signals = {

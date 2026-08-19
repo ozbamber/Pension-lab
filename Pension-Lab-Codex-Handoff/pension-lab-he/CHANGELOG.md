@@ -1,5 +1,12 @@
 # יומן שינויים
 
+## Pension report reconciliation — 2026-08-19
+
+- Added native-text pension report extraction for closing balance, personal management fees, contribution history, chronology, recurring-month evidence, and derived rates.
+- Added independent payslip/report reconciliation with cross-document confidence and explicit conflicts.
+- Fixed salary candidate scoring so nearby decimal or OCR values cannot outrank financially consistent evidence.
+- Added Hebrew review presentation for reconciled values, balance date, and management fees while preserving local-only processing.
+
 ## Local PDF payslip OCR — 2026-08-19
 
 - Restricted payslip upload to PDF and preserved the existing annual-report fallback behavior.

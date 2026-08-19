@@ -187,27 +187,72 @@
     const confidence = Math.max(0, Math.min(1,
       rowConfidence(row) * 0.35 + candidate.confidence * 0.25 + candidateDistanceScore(row, candidate.raw) * 0.25 + formatScore * 0.15
     ));
-    return { value: normalized.value, confidence, raw: candidate.raw };
+    return { value: normalized.value, confidence, raw: candidate.raw, x: candidate.x };
   }
 
-  function bestRowValues(rows, fieldName) {
+  function allRowValues(rows, fieldName) {
     const matches = [];
     for (const row of rows) {
       const alias = matchAlias(row, fieldName);
       if (!alias) continue;
-      const candidates = candidatesForRow(row);
-      const amountCandidates = candidates.map((candidate) => scoredCandidate(row, candidate, 'amount')).filter(Boolean);
-      const rateCandidates = candidates.map((candidate) => scoredCandidate(row, candidate, 'rate')).filter(Boolean);
+      const ownCandidates = candidatesForRow(row);
+      const rowIndex = rows.indexOf(row);
+      const candidateRows = ownCandidates.length ? [row] : rows.filter((candidateRow, candidateIndex) => candidateRow.page === row.page && (Math.abs(candidateRow.y - row.y) <= 72 || Math.abs(candidateIndex - rowIndex) <= 2))
+        .sort((left, right) => {
+          const leftIndex = rows.indexOf(left) - rowIndex;
+          const rightIndex = rows.indexOf(right) - rowIndex;
+          const leftRank = leftIndex >= 0 ? leftIndex : Math.abs(leftIndex) + 3;
+          const rightRank = rightIndex >= 0 ? rightIndex : Math.abs(rightIndex) + 3;
+          return leftRank - rightRank;
+        });
+      const candidateEntries = candidateRows.flatMap((candidateRow) => candidatesForRow(candidateRow).map((candidate) => ({ candidate, candidateRow })));
+      const amountCandidates = candidateEntries.map(({ candidate, candidateRow }) => {
+        const scored = scoredCandidate(candidateRow, candidate, 'amount');
+        if (scored) scored.confidence = Math.max(0, scored.confidence - Math.abs(candidateRow.y - row.y) / 220);
+        return scored;
+      }).filter(Boolean);
+      const rateCandidates = candidateEntries.map(({ candidate, candidateRow }) => {
+        const scored = scoredCandidate(candidateRow, candidate, 'rate');
+        if (scored) scored.confidence = Math.max(0, scored.confidence - Math.abs(candidateRow.y - row.y) / 220);
+        return scored;
+      }).filter(Boolean);
       amountCandidates.sort((a, b) => b.confidence - a.confidence);
       rateCandidates.sort((a, b) => b.confidence - a.confidence);
       matches.push({
         aliasId: alias.id, page: row.page,
         amount: amountCandidates[0] || null,
         rate: rateCandidates[0] || null,
+        amountCandidates,
       });
     }
     matches.sort((a, b) => Math.max(b.amount?.confidence || 0, b.rate?.confidence || 0) - Math.max(a.amount?.confidence || 0, a.rate?.confidence || 0));
-    return matches[0] || null;
+    return matches;
+  }
+
+  function bestRowValues(rows, fieldName) {
+    return allRowValues(rows, fieldName)[0] || null;
+  }
+
+  function bestSalaryValues(rows, contributionMatches) {
+    const candidates = allRowValues(rows, 'insuredSalary').flatMap((match) =>
+      match.amountCandidates.map((amount) => ({ ...match, amount }))
+    );
+    const contributionAmounts = contributionMatches
+      .map((match) => match && match.amount && match.amount.value)
+      .filter((amount) => Number.isFinite(amount) && amount > 0);
+    candidates.forEach((candidate) => {
+      let consistency = 0;
+      for (const amount of contributionAmounts) {
+        const rate = amount / candidate.amount.value;
+        if (candidate.amount.value <= amount || rate > 0.6) consistency -= 0.75;
+        else if (rate >= 0.002 && rate <= 0.35) consistency += 0.18;
+      }
+      candidate.financialScore = candidate.amount.confidence + consistency;
+    });
+    candidates.sort((a, b) => b.financialScore - a.financialScore || b.amount.confidence - a.amount.confidence);
+    const selected = candidates[0] || null;
+    if (selected && selected.financialScore < 0.45) return null;
+    return selected;
   }
 
   function directResult(candidate, aliasMatch, method, unit) {
@@ -283,11 +328,11 @@
     const tokens = tokensFromInput(input);
     const rows = buildRows(tokens);
     const fields = {};
-    const salaryMatch = bestRowValues(rows, 'insuredSalary');
     const grossMatch = bestRowValues(rows, 'grossSalary');
     const employeeMatch = bestRowValues(rows, 'employeeContribution');
     const employerMatch = bestRowValues(rows, 'employerContribution');
     const severanceMatch = bestRowValues(rows, 'severanceContribution');
+    const salaryMatch = bestSalaryValues(rows, [employeeMatch, employerMatch, severanceMatch]);
 
     if (salaryMatch) fields.insuredSalary = directResult(salaryMatch.amount, salaryMatch, method, 'ILS');
     if (grossMatch) fields.grossSalary = directResult(grossMatch.amount, grossMatch, method, 'ILS');

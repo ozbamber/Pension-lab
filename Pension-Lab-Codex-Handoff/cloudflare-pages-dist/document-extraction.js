@@ -11,6 +11,7 @@
     PENSION_REPORT: 'pensionReport',
     PENSION_REPORT_DIRECT: 'pensionReport',
     PENSION_REPORT_DERIVED: 'pensionReportDerived',
+    CROSS_VALIDATED: 'crossValidated',
     SYSTEM: 'system',
     USER: 'user',
     USER_OVERRIDE: 'user',
@@ -23,8 +24,10 @@
   ]);
 
   const PENSION_REPORT_FIELDS = Object.freeze([
-    'currentBalance', 'balanceDate', 'depositFee', 'balanceFee', 'pensionProvider',
-    'investmentTrack', 'reportDate', 'annualContributions',
+    'currentBalance', 'balanceDate', 'depositManagementFeeRate', 'balanceManagementFeeRate', 'pensionProvider',
+    'reportDate', 'latestReportedPensionableSalary', 'latestEmployeeContributionAmount',
+    'latestEmployerContributionAmount', 'latestSeveranceContributionAmount', 'latestEmployeeContributionRate',
+    'latestEmployerContributionRate', 'latestSeveranceRate',
   ]);
 
   function field(value = null, source = SOURCES.SYSTEM, confidence = null, confirmedByUser = false, metadata = {}) {
@@ -86,6 +89,7 @@
   }
 
   function parsePensionReport(text, fileName) {
+    if (root.PensionReportParser) return wrapPensionReportFields(root.PensionReportParser.parsePensionReport(text, { method: 'pdf-text' }), fileName);
     const fields = emptyExtraction(SOURCES.PENSION_REPORT);
     const currentBalance = firstMatch(text, [
       /(?:יתרה\s*(?:נוכחית|לסוף\s*שנה)|סה["״']?כ\s*חיסכון|current\s*balance|closing\s*balance)\s*[:\-]?\s*([\d,.\s]+)/i,
@@ -95,6 +99,18 @@
     if (currentBalance != null) fields.currentBalance = direct(currentBalance, SOURCES.PENSION_REPORT_DIRECT, 'ILS', fileName);
     if (depositFee != null) fields.depositFee = direct(depositFee, SOURCES.PENSION_REPORT_DIRECT, 'ratio', fileName, 0.9);
     if (balanceFee != null) fields.balanceFee = direct(balanceFee, SOURCES.PENSION_REPORT_DIRECT, 'ratio', fileName, 0.9);
+    return fields;
+  }
+
+  function wrapPensionReportFields(parsed, fileName) {
+    const fields = emptyExtraction(SOURCES.PENSION_REPORT);
+    Object.entries(parsed.fields || {}).forEach(([name, item]) => {
+      if (!PENSION_REPORT_FIELDS.includes(name) || !item || item.value == null) return;
+      fields[name] = field(item.value, item.origin === 'derived' ? SOURCES.PENSION_REPORT_DERIVED : SOURCES.PENSION_REPORT_DIRECT, item.confidence, false, {
+        unit: item.unit, sourceDocument: null, requiresConfirmation: item.requiresConfirmation,
+        extractionMethod: parsed.method, evidence: item.evidence,
+      });
+    });
     return fields;
   }
 
@@ -160,7 +176,7 @@
       if (pdf.numPages > MAX_PDF_PAGES) {
         return result('too-many-pages', kind, emptyExtraction(kind), file.name, { pageCount: pdf.numPages, reason: 'page-count-limit' });
       }
-      const maxPages = kind === SOURCES.PAYSLIP ? Math.min(pdf.numPages, MAX_PAYSLIP_PROCESSING_PAGES) : Math.min(pdf.numPages, 3);
+      const maxPages = kind === SOURCES.PAYSLIP ? Math.min(pdf.numPages, MAX_PAYSLIP_PROCESSING_PAGES) : Math.min(pdf.numPages, MAX_PDF_PAGES);
       const nativeResult = await L.extractNativePages(pdf, { maxPages, signal: options.signal, onProgress: options.onProgress });
       const assessment = L.assessNativeText(nativeResult, kind);
       if (looksLikeWrongDocument(nativeResult.text, kind)) {
@@ -168,14 +184,29 @@
       }
 
       if (kind === SOURCES.PENSION_REPORT) {
-        const fields = assessment.useful ? parsePensionReport(nativeResult.text, file.name) : emptyExtraction(kind);
+        const reportText = root.PensionPayslipParser
+          ? root.PensionPayslipParser.buildRows(root.PensionPayslipParser.tokensFromInput(nativeResult)).map((row) => row.directText).join('\n')
+          : nativeResult.text;
+        const parsed = assessment.useful && root.PensionReportParser ? root.PensionReportParser.parsePensionReport(reportText, { method: 'pdf-text' }) : null;
+        if (parsed) {
+          const tokenFees = root.PensionReportParser.parseManagementFeesFromTokens(nativeResult);
+          Object.entries(tokenFees).forEach(([name, item]) => {
+            parsed.fields[name] = { value: item.value, unit: 'ratio', origin: 'direct', confidence: 0.96, requiresConfirmation: false, evidence: { aliasId: name, page: item.page, method: 'pdf-text' } };
+          });
+        }
+        const fields = parsed ? wrapPensionReportFields(parsed, file.name) : (assessment.useful ? parsePensionReport(nativeResult.text, file.name) : emptyExtraction(kind));
         return result(identifiedCount(fields) ? 'partial' : 'manual-required', kind, fields, file.name, {
           method: 'pdf-text', reason: assessment.reason, pageCount: pdf.numPages,
         });
       }
 
-      if (assessment.useful) {
-        const parsed = parsePayslipInput(nativeResult, 'pdf-text', file.name);
+      {
+        let parsed = parsePayslipInput(nativeResult, 'pdf-text', file.name);
+        if (!parsed?.fields?.insuredSalary?.value) {
+          const tokenSequence = nativeResult.pages.flatMap((page) => page.tokens.map((token) => token.text)).join('\n');
+          const sequential = parsePayslipInput(tokenSequence, 'pdf-text', file.name);
+          if (sequential?.fields?.insuredSalary?.value) parsed = sequential;
+        }
         if (parsed && identifiedCount(parsed.fields)) {
           return result('partial', kind, parsed.fields, file.name, {
             method: 'pdf-text', reason: 'native-text-usable', diagnostics: parsed.diagnostics, pageCount: pdf.numPages,

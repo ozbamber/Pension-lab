@@ -562,7 +562,16 @@ main { width: min(1180px, calc(100% - 32px)); padding-top: 44px; }
         <article class="review-item critical-item">
           <div class="review-item-heading"><div><h3>הסכום שכבר חסכת</h3><small>יתרה נוכחית בכל החיסכון שנכלל בתחזית.</small></div><b class="source-badge" data-source-for="currentBalance"></b></div>
           <label class="money-input large-input"><span>₪</span><input id="currentBalance" type="number" min="0" step="1000" inputmode="numeric" aria-label="יתרה נוכחית" aria-describedby="currentBalanceError" /></label>
+          <small id="balanceDateReview" class="calculation-note"></small>
           <p id="currentBalanceError" class="field-error hidden"></p>
+        </article>
+        <article class="review-item fee-review">
+          <div class="review-item-heading"><div><h3>דמי ניהול מכל הפקדה</h3><small>האחוז שנגבה מכל הפקדה חדשה.</small></div><b class="source-badge" data-source-for="depositFee"></b></div>
+          <strong id="depositFeeReview" class="review-value">—</strong>
+        </article>
+        <article class="review-item fee-review">
+          <div class="review-item-heading"><div><h3>דמי ניהול מהסכום שכבר חסכת</h3><small>האחוז שנגבה בכל שנה מהכסף שכבר נצבר.</small></div><b class="source-badge" data-source-for="balanceFee"></b></div>
+          <strong id="balanceFeeReview" class="review-value">—</strong>
         </article>
         <article class="review-item contribution-review">
           <div class="review-item-heading"><div><h3>הפקדות חודשיות</h3><small>אם אין נתון מהתלוש, אפשר לאשר את הנחות המערכת או לשנות אותן.</small></div><b class="source-badge" data-source-for="employeeContributionRate"></b></div>
@@ -1259,27 +1268,72 @@ main { width: min(1180px, calc(100% - 32px)); padding-top: 44px; }
     const confidence = Math.max(0, Math.min(1,
       rowConfidence(row) * 0.35 + candidate.confidence * 0.25 + candidateDistanceScore(row, candidate.raw) * 0.25 + formatScore * 0.15
     ));
-    return { value: normalized.value, confidence, raw: candidate.raw };
+    return { value: normalized.value, confidence, raw: candidate.raw, x: candidate.x };
   }
 
-  function bestRowValues(rows, fieldName) {
+  function allRowValues(rows, fieldName) {
     const matches = [];
     for (const row of rows) {
       const alias = matchAlias(row, fieldName);
       if (!alias) continue;
-      const candidates = candidatesForRow(row);
-      const amountCandidates = candidates.map((candidate) => scoredCandidate(row, candidate, 'amount')).filter(Boolean);
-      const rateCandidates = candidates.map((candidate) => scoredCandidate(row, candidate, 'rate')).filter(Boolean);
+      const ownCandidates = candidatesForRow(row);
+      const rowIndex = rows.indexOf(row);
+      const candidateRows = ownCandidates.length ? [row] : rows.filter((candidateRow, candidateIndex) => candidateRow.page === row.page && (Math.abs(candidateRow.y - row.y) <= 72 || Math.abs(candidateIndex - rowIndex) <= 2))
+        .sort((left, right) => {
+          const leftIndex = rows.indexOf(left) - rowIndex;
+          const rightIndex = rows.indexOf(right) - rowIndex;
+          const leftRank = leftIndex >= 0 ? leftIndex : Math.abs(leftIndex) + 3;
+          const rightRank = rightIndex >= 0 ? rightIndex : Math.abs(rightIndex) + 3;
+          return leftRank - rightRank;
+        });
+      const candidateEntries = candidateRows.flatMap((candidateRow) => candidatesForRow(candidateRow).map((candidate) => ({ candidate, candidateRow })));
+      const amountCandidates = candidateEntries.map(({ candidate, candidateRow }) => {
+        const scored = scoredCandidate(candidateRow, candidate, 'amount');
+        if (scored) scored.confidence = Math.max(0, scored.confidence - Math.abs(candidateRow.y - row.y) / 220);
+        return scored;
+      }).filter(Boolean);
+      const rateCandidates = candidateEntries.map(({ candidate, candidateRow }) => {
+        const scored = scoredCandidate(candidateRow, candidate, 'rate');
+        if (scored) scored.confidence = Math.max(0, scored.confidence - Math.abs(candidateRow.y - row.y) / 220);
+        return scored;
+      }).filter(Boolean);
       amountCandidates.sort((a, b) => b.confidence - a.confidence);
       rateCandidates.sort((a, b) => b.confidence - a.confidence);
       matches.push({
         aliasId: alias.id, page: row.page,
         amount: amountCandidates[0] || null,
         rate: rateCandidates[0] || null,
+        amountCandidates,
       });
     }
     matches.sort((a, b) => Math.max(b.amount?.confidence || 0, b.rate?.confidence || 0) - Math.max(a.amount?.confidence || 0, a.rate?.confidence || 0));
-    return matches[0] || null;
+    return matches;
+  }
+
+  function bestRowValues(rows, fieldName) {
+    return allRowValues(rows, fieldName)[0] || null;
+  }
+
+  function bestSalaryValues(rows, contributionMatches) {
+    const candidates = allRowValues(rows, 'insuredSalary').flatMap((match) =>
+      match.amountCandidates.map((amount) => ({ ...match, amount }))
+    );
+    const contributionAmounts = contributionMatches
+      .map((match) => match && match.amount && match.amount.value)
+      .filter((amount) => Number.isFinite(amount) && amount > 0);
+    candidates.forEach((candidate) => {
+      let consistency = 0;
+      for (const amount of contributionAmounts) {
+        const rate = amount / candidate.amount.value;
+        if (candidate.amount.value <= amount || rate > 0.6) consistency -= 0.75;
+        else if (rate >= 0.002 && rate <= 0.35) consistency += 0.18;
+      }
+      candidate.financialScore = candidate.amount.confidence + consistency;
+    });
+    candidates.sort((a, b) => b.financialScore - a.financialScore || b.amount.confidence - a.amount.confidence);
+    const selected = candidates[0] || null;
+    if (selected && selected.financialScore < 0.45) return null;
+    return selected;
   }
 
   function directResult(candidate, aliasMatch, method, unit) {
@@ -1355,11 +1409,11 @@ main { width: min(1180px, calc(100% - 32px)); padding-top: 44px; }
     const tokens = tokensFromInput(input);
     const rows = buildRows(tokens);
     const fields = {};
-    const salaryMatch = bestRowValues(rows, 'insuredSalary');
     const grossMatch = bestRowValues(rows, 'grossSalary');
     const employeeMatch = bestRowValues(rows, 'employeeContribution');
     const employerMatch = bestRowValues(rows, 'employerContribution');
     const severanceMatch = bestRowValues(rows, 'severanceContribution');
+    const salaryMatch = bestSalaryValues(rows, [employeeMatch, employerMatch, severanceMatch]);
 
     if (salaryMatch) fields.insuredSalary = directResult(salaryMatch.amount, salaryMatch, method, 'ILS');
     if (grossMatch) fields.grossSalary = directResult(grossMatch.amount, grossMatch, method, 'ILS');
@@ -1422,6 +1476,228 @@ main { width: min(1180px, calc(100% - 32px)); padding-top: 44px; }
     countPayslipAnchors,
     parsePayslip,
   });
+})(typeof window !== 'undefined' ? window : globalThis);
+
+  </script>
+  <script>
+(function (root) {
+  'use strict';
+
+  const F = root.PensionFinancial;
+  const P = root.PensionPayslipParser;
+  if (!F || !P) throw new Error('Financial and spatial parsers must be loaded first.');
+
+  const ALIASES = Object.freeze({
+    closingBalance: Object.freeze(['יתרת הכספים בקרן בסוף תקופת הדיווח', 'יתרה בסוף תקופת הדיווח', 'יתרה בסוף השנה', 'יתרה נוכחית', 'closing balance', 'current balance']),
+    openingBalance: Object.freeze(['יתרה בתחילת תקופת הדיווח', 'יתרת פתיחה', 'opening balance', 'beginning balance']),
+    personalFees: Object.freeze(['דמי ניהול אישיים', 'דמי הניהול שנגבו ממך', 'דמי ניהול שנגבו מהעמית', 'personal management fees']),
+    fundAverage: Object.freeze(['ממוצע דמי ניהול בקרן', 'דמי ניהול ממוצעים', 'fund average', 'average management fees']),
+    depositFee: Object.freeze(['דמי ניהול מהפקדה', 'מהפקדה', 'deposit fee']),
+    balanceFee: Object.freeze(['דמי ניהול מחיסכון', 'דמי ניהול מצבירה', 'מחיסכון', 'מצבירה', 'balance fee']),
+  });
+
+  function normalized(value) { return P.normalizeSearchText(value); }
+  function containsAlias(text, aliases) { const value = normalized(text); return aliases.some((alias) => value.includes(normalized(alias))); }
+  function amountFragments(text) { return String(text || '').match(/[-−]?[\dOoIl|]+(?:[.,][\dOoIl|]+)*/g) || []; }
+  function percentageFragments(text) { return String(text || '').match(/[\dOoIl|]+(?:[.,][\dOoIl|]+)?\s*%/g) || []; }
+  function field(value, unit, origin, confidence, evidence) {
+    return { value, unit, origin, confidence, requiresConfirmation: confidence < 0.9, evidence };
+  }
+  function rowsFromInput(input) { return P.buildRows(P.tokensFromInput(input)); }
+  function rowText(row) { return `${row.directText} ${row.reverseText}`; }
+  function nearbyRows(rows, index, radius = 2) { return rows.slice(Math.max(0, index - radius), Math.min(rows.length, index + radius + 1)); }
+
+  function parseDate(value) {
+    const text = String(value || '');
+    let match = text.match(/\b(0?[1-9]|1[0-2])[\/.\-](20\d{2})\b/);
+    if (match) return { display: `${String(match[1]).padStart(2, '0')}/${match[2]}`, key: Number(match[2]) * 12 + Number(match[1]) };
+    match = text.match(/\b([0-3]?\d)[\/.\-](0?[1-9]|1[0-2])[\/.\-](20\d{2})\b/);
+    if (match) return { display: `${String(match[1]).padStart(2, '0')}/${String(match[2]).padStart(2, '0')}/${match[3]}`, key: Number(match[3]) * 372 + Number(match[2]) * 31 + Number(match[1]) };
+    return null;
+  }
+
+  function extractClosingBalance(rows) {
+    const candidates = [];
+    rows.forEach((row, index) => {
+      const text = rowText(row);
+      const semanticClosing = /סוף/.test(normalized(text)) && /(?:תקופת|דיווח|שנה)/.test(normalized(text));
+      if (!containsAlias(text, ALIASES.closingBalance) && !semanticClosing) return;
+      nearbyRows(rows, index, 1).forEach((candidateRow) => amountFragments(rowText(candidateRow)).forEach((raw) => {
+        const parsed = F.normalizeFinancialValue(raw, { kind: 'amount' });
+        if (parsed.value >= 100 && parsed.value <= 100000000) candidates.push({ value: parsed.value, score: candidateRow === row ? 1 : 0.84, page: row.page });
+      }));
+    });
+    candidates.sort((a, b) => b.score - a.score || b.value - a.value);
+    return candidates[0] || null;
+  }
+
+  function extractFees(rows) {
+    const candidates = { depositManagementFeeRate: [], balanceManagementFeeRate: [] };
+    const averageHeaderIndexes = rows.map((row, index) => ({ index, text: normalized(rowText(row)) }))
+      .filter((item) => /ממוצע/.test(item.text) && /דמי/.test(item.text) && /ניהול/.test(item.text)).map((item) => item.index);
+    rows.forEach((row, index) => {
+      const text = rowText(row);
+      if (containsAlias(text, ALIASES.fundAverage) || (/ממוצע/.test(normalized(text)) && /דמי/.test(normalized(text)) && /ניהול/.test(normalized(text)))) return;
+      const percentages = percentageFragments(text);
+      if (!percentages.length) return;
+      const parsed = F.normalizeFinancialValue(percentages[0], { kind: 'rate' });
+      if (parsed.value == null || parsed.value > 0.2) return;
+      const directContext = normalized(text);
+      const nearestAliasDistance = (aliases) => rows.reduce((best, candidateRow, candidateIndex) => containsAlias(rowText(candidateRow), aliases) ? Math.min(best, Math.abs(candidateIndex - index)) : best, Infinity);
+      const depositDistance = nearestAliasDistance(ALIASES.depositFee);
+      const balanceDistance = nearestAliasDistance(ALIASES.balanceFee);
+      const preceding = rows.slice(Math.max(0, index - 4), index + 1).map(rowText).join(' ');
+      const nearAverage = averageHeaderIndexes.some((headerIndex) => Math.abs(headerIndex - index) <= 4);
+      const score = nearAverage || containsAlias(preceding, ALIASES.fundAverage) ? 0.25 : containsAlias(preceding, ALIASES.personalFees) ? 1 : 0.78 + index * 0.0001;
+      if (depositDistance <= 8 && depositDistance <= balanceDistance) candidates.depositManagementFeeRate.push({ value: parsed.value, page: row.page, score });
+      if (balanceDistance <= 8 && balanceDistance < depositDistance) candidates.balanceManagementFeeRate.push({ value: parsed.value, page: row.page, score });
+    });
+    return Object.fromEntries(Object.entries(candidates).map(([name, values]) => [name, values.sort((a, b) => b.score - a.score)[0]]).filter(([, item]) => item));
+  }
+
+  function parseContributionRows(rows) {
+    const output = [];
+    for (const row of rows) {
+      const text = rowText(row);
+      const dates = [...String(text).matchAll(/\b(0?[1-9]|1[0-2])[\/.\-](20\d{2})\b/g)].map((match) => `${match[1]}/${match[2]}`);
+      const withoutDates = text.replace(/\b(?:[0-3]?\d[\/.\-])?(?:0?[1-9]|1[0-2])[\/.\-]20\d{2}\b/g, ' ');
+      const numbers = amountFragments(withoutDates).map((raw) => F.normalizeFinancialValue(raw, { kind: 'amount' }).value)
+        .filter((value) => Number.isFinite(value));
+      const monetary = numbers.filter((value) => value >= 20);
+      if (!dates.length || monetary.length < 4) continue;
+      const salary = monetary.filter((value) => value >= 1000 && value <= 200000).sort((a, b) => b - a)[0];
+      if (!salary) continue;
+      const salaryIndex = monetary.indexOf(salary);
+      const after = monetary.slice(salaryIndex + 1).filter((value) => value > 0 && value < salary);
+      const before = monetary.slice(0, salaryIndex).filter((value) => value > 0 && value < salary);
+      const side = after.length >= 3 ? after : before.slice().reverse();
+      let contributions = side.slice(0, 3);
+      if (side.length >= 4) {
+        const totalIndex = side.findIndex((candidate, candidateIndex) => {
+          const others = side.filter((_, index) => index !== candidateIndex).slice(0, 3);
+          return others.length === 3 && F.approximatelyEqual(candidate, others.reduce((sum, value) => sum + value, 0), 3, 0.012);
+        });
+        if (totalIndex >= 0) {
+          const withoutTotal = side.filter((_, index) => index !== totalIndex).slice(0, 3);
+          contributions = totalIndex === 0 ? withoutTotal.reverse() : withoutTotal;
+        }
+      }
+      if (contributions.length < 3) continue;
+      const [employeeContribution, employerContribution, severanceContribution] = contributions;
+      const salaryMonth = parseDate(dates[dates.length - 1]);
+      output.push({
+        depositDate: dates.length > 1 ? parseDate(dates[0])?.display : null,
+        salaryMonth: salaryMonth?.display || null,
+        chronologyKey: salaryMonth?.key || 0,
+        pensionableSalary: salary,
+        employeeContribution,
+        employerContribution,
+        severanceContribution,
+        totalContribution: employeeContribution + employerContribution + severanceContribution,
+        page: row.page,
+      });
+    }
+    return output;
+  }
+
+  function recurringEvidence(history, latest) {
+    const recent = [...history].sort((a, b) => b.chronologyKey - a.chronologyKey).slice(0, 6);
+    const agrees = recent.filter((row) => ['pensionableSalary', 'employeeContribution', 'employerContribution', 'severanceContribution']
+      .every((name) => F.approximatelyEqual(row[name], latest[name], 2, 0.012))).length;
+    return { recentRows: recent.length, agreeingRows: agrees, recurring: agrees >= 2 };
+  }
+
+  function parsePensionReport(input, options = {}) {
+    const method = options.method === 'ocr' ? 'ocr' : 'pdf-text';
+    const rows = rowsFromInput(input);
+    const fields = {};
+    const balance = extractClosingBalance(rows);
+    if (balance) fields.currentBalance = field(balance.value, 'ILS', 'direct', balance.score >= 0.95 ? 0.97 : 0.88, { aliasId: 'closing-balance', page: balance.page, method });
+    const fees = extractFees(rows);
+    Object.entries(fees).forEach(([name, item]) => { fields[name] = field(item.value, 'ratio', 'direct', 0.95, { aliasId: name, page: item.page, method }); });
+    const history = parseContributionRows(rows);
+    history.sort((a, b) => b.chronologyKey - a.chronologyKey);
+    const latest = history[0];
+    if (latest) {
+      const pattern = recurringEvidence(history, latest);
+      const confidence = pattern.recurring ? 0.97 : 0.88;
+      const evidence = { aliasId: 'contribution-table', page: latest.page, method, salaryMonth: latest.salaryMonth, recurringPattern: pattern };
+      fields.latestReportedPensionableSalary = field(latest.pensionableSalary, 'ILS', 'direct', confidence, evidence);
+      fields.latestEmployeeContributionAmount = field(latest.employeeContribution, 'ILS', 'direct', confidence, evidence);
+      fields.latestEmployerContributionAmount = field(latest.employerContribution, 'ILS', 'direct', confidence, evidence);
+      fields.latestSeveranceContributionAmount = field(latest.severanceContribution, 'ILS', 'direct', confidence, evidence);
+      fields.latestEmployeeContributionRate = field(latest.employeeContribution / latest.pensionableSalary, 'ratio', 'derived', confidence - 0.01, evidence);
+      fields.latestEmployerContributionRate = field(latest.employerContribution / latest.pensionableSalary, 'ratio', 'derived', confidence - 0.01, evidence);
+      fields.latestSeveranceRate = field(latest.severanceContribution / latest.pensionableSalary, 'ratio', 'derived', confidence - 0.01, evidence);
+    }
+    const allText = typeof input === 'string' ? input : String(input?.text || rows.map(rowText).join('\n'));
+    const dates = [...allText.matchAll(/\b(?:[0-3]?\d[\/.\-])?(0?[1-9]|1[0-2])[\/.\-](20\d{2})\b/g)].map((match) => parseDate(match[0])).filter(Boolean).sort((a, b) => b.key - a.key);
+    if (dates[0]) fields.reportDate = field(dates[0].display, 'date', 'direct', 0.82, { aliasId: 'latest-date', page: 1, method });
+    if (dates[0] && fields.currentBalance) fields.balanceDate = field(dates[0].display, 'date', 'derived', 0.8, { aliasId: 'report-period-end', page: 1, method });
+    return { fields, contributionHistory: history, method, classification: /דוח\s*שנתי|annual\s*report/i.test(allText) ? 'ANNUAL_PENSION_REPORT' : 'PERIODIC_PENSION_REPORT' };
+  }
+
+  function parseManagementFeesFromTokens(input) {
+    const tokens = P.tokensFromInput(input);
+    const output = {};
+    for (let index = 0; index < tokens.length; index += 1) {
+      const labelContext = tokens.slice(index, index + 3).map((token) => token.text).join(' ');
+      const valueContext = tokens.slice(index, index + 8).map((token) => token.text).join(' ');
+      const percentages = percentageFragments(valueContext);
+      if (!percentages.length) continue;
+      const value = F.normalizeFinancialValue(percentages[0], { kind: 'rate' }).value;
+      if (value == null || value > 0.2) continue;
+      if (!output.depositManagementFeeRate && containsAlias(labelContext, ALIASES.depositFee)) output.depositManagementFeeRate = { value, page: tokens[index].page };
+      if (!output.balanceManagementFeeRate && containsAlias(labelContext, ALIASES.balanceFee)) output.balanceManagementFeeRate = { value, page: tokens[index].page };
+      if (output.depositManagementFeeRate && output.balanceManagementFeeRate) break;
+    }
+    return output;
+  }
+
+  function countReportAnchors(text) {
+    const value = normalized(text);
+    return [ALIASES.closingBalance, ALIASES.depositFee, ALIASES.balanceFee].filter((aliases) => aliases.some((alias) => value.includes(normalized(alias)))).length;
+  }
+
+  root.PensionReportParser = Object.freeze({ ALIASES, parseDate, parseContributionRows, parsePensionReport, parseManagementFeesFromTokens, countReportAnchors });
+})(typeof window !== 'undefined' ? window : globalThis);
+
+  </script>
+  <script>
+(function (root) {
+  'use strict';
+  const F = root.PensionFinancial;
+  function value(fields, name) { const item = fields && fields[name]; return item && item.value != null ? item : null; }
+  function monthKey(text) { const match = String(text || '').match(/(0?[1-9]|1[0-2])[\/.\-](20\d{2})/); return match ? Number(match[2]) * 12 + Number(match[1]) : 0; }
+  function combine(primary, secondary, options = {}) {
+    if (!primary) return secondary ? { ...secondary } : null;
+    if (!secondary) return { ...primary };
+    const agrees = F.approximatelyEqual(primary.value, secondary.value, options.absoluteTolerance || 2, options.relativeTolerance || 0.025);
+    if (agrees) return { ...primary, confidence: Math.min(0.995, Math.max(primary.confidence || 0, secondary.confidence || 0) + 0.08), requiresConfirmation: false, source: 'crossValidated', evidence: [primary, secondary, { type: 'CROSS_DOCUMENT_VALIDATION' }] };
+    if ((secondary.confidence || 0) >= (primary.confidence || 0) + 0.07) {
+      return { ...secondary, evidence: [primary, secondary, { type: 'STRONGER_INDEPENDENT_EVIDENCE' }] };
+    }
+    const primaryDate = monthKey(primary.evidence?.salaryMonth || primary.sourceDate);
+    const secondaryDate = monthKey(secondary.evidence?.salaryMonth || secondary.sourceDate);
+    if (primaryDate && secondaryDate && primaryDate > secondaryDate) return { ...primary, evidence: [primary, secondary, { type: 'CHRONOLOGY_RESOLVED' }] };
+    return { ...primary, confidence: Math.min(primary.confidence || 0.8, 0.78), requiresConfirmation: true, conflict: { primary: primary.value, secondary: secondary.value }, evidence: [primary, secondary, { type: 'CROSS_DOCUMENT_CONFLICT' }] };
+  }
+  function reconcile(payslipFields = {}, reportFields = {}) {
+    const fields = {};
+    fields.insuredSalary = combine(value(payslipFields, 'insuredSalary'), value(reportFields, 'latestReportedPensionableSalary'));
+    fields.employeeContributionAmount = combine(value(payslipFields, 'employeeContributionAmount'), value(reportFields, 'latestEmployeeContributionAmount'));
+    fields.employeeContributionRate = combine(value(payslipFields, 'employeeContributionRate'), value(reportFields, 'latestEmployeeContributionRate'), { absoluteTolerance: 0.0008, relativeTolerance: 0.025 });
+    fields.employerContributionAmount = combine(value(payslipFields, 'employerContributionAmount'), value(reportFields, 'latestEmployerContributionAmount'));
+    fields.employerContributionRate = combine(value(payslipFields, 'employerContributionRate'), value(reportFields, 'latestEmployerContributionRate'), { absoluteTolerance: 0.0008, relativeTolerance: 0.025 });
+    fields.severanceContributionAmount = combine(value(payslipFields, 'severanceContributionAmount'), value(reportFields, 'latestSeveranceContributionAmount'));
+    fields.severanceRate = combine(value(payslipFields, 'severanceRate'), value(reportFields, 'latestSeveranceRate'), { absoluteTolerance: 0.001, relativeTolerance: 0.03 });
+    fields.currentBalance = value(reportFields, 'currentBalance');
+    fields.balanceDate = value(reportFields, 'balanceDate');
+    fields.depositManagementFeeRate = value(reportFields, 'depositManagementFeeRate');
+    fields.balanceManagementFeeRate = value(reportFields, 'balanceManagementFeeRate');
+    return { fields: Object.fromEntries(Object.entries(fields).filter(([, item]) => item)), requiresConfirmation: Object.values(fields).some((item) => item?.requiresConfirmation) };
+  }
+  root.PensionInputReconciler = Object.freeze({ reconcile });
 })(typeof window !== 'undefined' ? window : globalThis);
 
   </script>
@@ -1525,7 +1801,7 @@ main { width: min(1180px, calc(100% - 32px)); padding-top: 44px; }
     const digits = (text.match(/\d/g) || []).length;
     const anchors = kind === 'payslip' && root.PensionPayslipParser
       ? root.PensionPayslipParser.countPayslipAnchors(text)
-      : Number(/יתרה|דמי\s*ניהול|current\s*balance|annual\s*report/i.test(text));
+      : root.PensionReportParser ? root.PensionReportParser.countReportAnchors(text) : Number(/יתרה|דמי\s*ניהול|current\s*balance|annual\s*report/i.test(text));
     const printable = (text.match(/[\u0590-\u05ff\x20-\x7e]/g) || []).length;
     const printableRatio = text.length ? printable / text.length : 0;
     const signals = {
@@ -1672,6 +1948,7 @@ main { width: min(1180px, calc(100% - 32px)); padding-top: 44px; }
     PENSION_REPORT: 'pensionReport',
     PENSION_REPORT_DIRECT: 'pensionReport',
     PENSION_REPORT_DERIVED: 'pensionReportDerived',
+    CROSS_VALIDATED: 'crossValidated',
     SYSTEM: 'system',
     USER: 'user',
     USER_OVERRIDE: 'user',
@@ -1684,8 +1961,10 @@ main { width: min(1180px, calc(100% - 32px)); padding-top: 44px; }
   ]);
 
   const PENSION_REPORT_FIELDS = Object.freeze([
-    'currentBalance', 'balanceDate', 'depositFee', 'balanceFee', 'pensionProvider',
-    'investmentTrack', 'reportDate', 'annualContributions',
+    'currentBalance', 'balanceDate', 'depositManagementFeeRate', 'balanceManagementFeeRate', 'pensionProvider',
+    'reportDate', 'latestReportedPensionableSalary', 'latestEmployeeContributionAmount',
+    'latestEmployerContributionAmount', 'latestSeveranceContributionAmount', 'latestEmployeeContributionRate',
+    'latestEmployerContributionRate', 'latestSeveranceRate',
   ]);
 
   function field(value = null, source = SOURCES.SYSTEM, confidence = null, confirmedByUser = false, metadata = {}) {
@@ -1747,6 +2026,7 @@ main { width: min(1180px, calc(100% - 32px)); padding-top: 44px; }
   }
 
   function parsePensionReport(text, fileName) {
+    if (root.PensionReportParser) return wrapPensionReportFields(root.PensionReportParser.parsePensionReport(text, { method: 'pdf-text' }), fileName);
     const fields = emptyExtraction(SOURCES.PENSION_REPORT);
     const currentBalance = firstMatch(text, [
       /(?:יתרה\s*(?:נוכחית|לסוף\s*שנה)|סה["״']?כ\s*חיסכון|current\s*balance|closing\s*balance)\s*[:\-]?\s*([\d,.\s]+)/i,
@@ -1756,6 +2036,18 @@ main { width: min(1180px, calc(100% - 32px)); padding-top: 44px; }
     if (currentBalance != null) fields.currentBalance = direct(currentBalance, SOURCES.PENSION_REPORT_DIRECT, 'ILS', fileName);
     if (depositFee != null) fields.depositFee = direct(depositFee, SOURCES.PENSION_REPORT_DIRECT, 'ratio', fileName, 0.9);
     if (balanceFee != null) fields.balanceFee = direct(balanceFee, SOURCES.PENSION_REPORT_DIRECT, 'ratio', fileName, 0.9);
+    return fields;
+  }
+
+  function wrapPensionReportFields(parsed, fileName) {
+    const fields = emptyExtraction(SOURCES.PENSION_REPORT);
+    Object.entries(parsed.fields || {}).forEach(([name, item]) => {
+      if (!PENSION_REPORT_FIELDS.includes(name) || !item || item.value == null) return;
+      fields[name] = field(item.value, item.origin === 'derived' ? SOURCES.PENSION_REPORT_DERIVED : SOURCES.PENSION_REPORT_DIRECT, item.confidence, false, {
+        unit: item.unit, sourceDocument: null, requiresConfirmation: item.requiresConfirmation,
+        extractionMethod: parsed.method, evidence: item.evidence,
+      });
+    });
     return fields;
   }
 
@@ -1821,7 +2113,7 @@ main { width: min(1180px, calc(100% - 32px)); padding-top: 44px; }
       if (pdf.numPages > MAX_PDF_PAGES) {
         return result('too-many-pages', kind, emptyExtraction(kind), file.name, { pageCount: pdf.numPages, reason: 'page-count-limit' });
       }
-      const maxPages = kind === SOURCES.PAYSLIP ? Math.min(pdf.numPages, MAX_PAYSLIP_PROCESSING_PAGES) : Math.min(pdf.numPages, 3);
+      const maxPages = kind === SOURCES.PAYSLIP ? Math.min(pdf.numPages, MAX_PAYSLIP_PROCESSING_PAGES) : Math.min(pdf.numPages, MAX_PDF_PAGES);
       const nativeResult = await L.extractNativePages(pdf, { maxPages, signal: options.signal, onProgress: options.onProgress });
       const assessment = L.assessNativeText(nativeResult, kind);
       if (looksLikeWrongDocument(nativeResult.text, kind)) {
@@ -1829,14 +2121,29 @@ main { width: min(1180px, calc(100% - 32px)); padding-top: 44px; }
       }
 
       if (kind === SOURCES.PENSION_REPORT) {
-        const fields = assessment.useful ? parsePensionReport(nativeResult.text, file.name) : emptyExtraction(kind);
+        const reportText = root.PensionPayslipParser
+          ? root.PensionPayslipParser.buildRows(root.PensionPayslipParser.tokensFromInput(nativeResult)).map((row) => row.directText).join('\n')
+          : nativeResult.text;
+        const parsed = assessment.useful && root.PensionReportParser ? root.PensionReportParser.parsePensionReport(reportText, { method: 'pdf-text' }) : null;
+        if (parsed) {
+          const tokenFees = root.PensionReportParser.parseManagementFeesFromTokens(nativeResult);
+          Object.entries(tokenFees).forEach(([name, item]) => {
+            parsed.fields[name] = { value: item.value, unit: 'ratio', origin: 'direct', confidence: 0.96, requiresConfirmation: false, evidence: { aliasId: name, page: item.page, method: 'pdf-text' } };
+          });
+        }
+        const fields = parsed ? wrapPensionReportFields(parsed, file.name) : (assessment.useful ? parsePensionReport(nativeResult.text, file.name) : emptyExtraction(kind));
         return result(identifiedCount(fields) ? 'partial' : 'manual-required', kind, fields, file.name, {
           method: 'pdf-text', reason: assessment.reason, pageCount: pdf.numPages,
         });
       }
 
-      if (assessment.useful) {
-        const parsed = parsePayslipInput(nativeResult, 'pdf-text', file.name);
+      {
+        let parsed = parsePayslipInput(nativeResult, 'pdf-text', file.name);
+        if (!parsed?.fields?.insuredSalary?.value) {
+          const tokenSequence = nativeResult.pages.flatMap((page) => page.tokens.map((token) => token.text)).join('\n');
+          const sequential = parsePayslipInput(tokenSequence, 'pdf-text', file.name);
+          if (sequential?.fields?.insuredSalary?.value) parsed = sequential;
+        }
         if (parsed && identifiedCount(parsed.fields)) {
           return result('partial', kind, parsed.fields, file.name, {
             method: 'pdf-text', reason: 'native-text-usable', diagnostics: parsed.diagnostics, pageCount: pdf.numPages,
@@ -1951,6 +2258,7 @@ main { width: min(1180px, calc(100% - 32px)); padding-top: 44px; }
 
   const E = window.PensionEngine;
   const D = window.PensionDocuments;
+  const X = window.PensionInputReconciler;
   const $ = (id) => document.getElementById(id);
   const storageKey = 'pension-lab-he-session-state-v3';
   const flowStorageKey = 'pension-lab-he-session-flow-v1';
@@ -1995,7 +2303,7 @@ main { width: min(1180px, calc(100% - 32px)); padding-top: 44px; }
   let lastChanged = 'initial';
   const sourceLabels = Object.freeze({
     system: 'הנחת מערכת', payslip: 'מהתלוש', payslipDerived: 'חושב מהתלוש',
-    pensionReport: 'מדוח הפנסיה', pensionReportDerived: 'חושב מדוח הפנסיה', user: 'שונה על ידך',
+    pensionReport: 'מדוח הפנסיה', pensionReportDerived: 'חושב מדוח הפנסיה', crossValidated: 'אומת מול שני המסמכים', user: 'שונה על ידך',
   });
   const sourceExplanations = Object.freeze({
     system: 'ערך ברירת מחדל של המחשבון. אפשר לשנות אותו בכל רגע.',
@@ -2004,6 +2312,7 @@ main { width: min(1180px, calc(100% - 32px)); padding-top: 44px; }
     payslipDerived: 'הערך חושב מנתונים שזוהו בתלוש ואושר.',
     pensionReport: 'הערך זוהה ישירות בדוח הפנסיה ואושר.',
     pensionReportDerived: 'הערך חושב מנתונים שזוהו בדוח הפנסיה ואושר.',
+    crossValidated: 'הערך נתמך באופן בלתי תלוי בתלוש ובדוח הפנסיה.',
   });
   const fieldSources = {
     birthYear: D.field(null), retirementTrack: D.field(null), currentAge: D.field(35), retirementAge: D.field(67), currentBalance: D.field(null),
@@ -2067,7 +2376,7 @@ main { width: min(1180px, calc(100% - 32px)); padding-top: 44px; }
       const source = fieldSources[field]?.source || D.SOURCES.SYSTEM;
       return `<div class="provenance-item"><span>${label}</span><strong>${value}</strong><b class="source-badge explainable" tabindex="0" data-source="${source}" data-tooltip="${sourceExplanations[source]}">${sourceLabels[source]}</b></div>`;
     }).join('');
-    const documentCount = items.filter(([, , field]) => ['payslip', 'payslipDerived', 'pensionReport', 'pensionReportDerived'].includes(fieldSources[field]?.source)).length;
+    const documentCount = items.filter(([, , field]) => ['payslip', 'payslipDerived', 'pensionReport', 'pensionReportDerived', 'crossValidated'].includes(fieldSources[field]?.source)).length;
     const systemCount = items.filter(([, , field]) => (fieldSources[field]?.source || D.SOURCES.SYSTEM) === D.SOURCES.SYSTEM).length;
     if ($('sourceSummaryText')) $('sourceSummaryText').textContent = `${documentCount} נתונים מהמסמכים · ${systemCount} הנחות מערכת · מאיפה הגיעו המספרים?`;
   }
@@ -2409,6 +2718,9 @@ main { width: min(1180px, calc(100% - 32px)); padding-top: 44px; }
     setValue('currentBalance', Math.round(state.profile.currentBalance));
     setValue('monthlySalary', Math.round(state.profile.monthlySalary));
     setValue('pensionableSalary', Math.round(state.profile.pensionableSalary));
+    if ($('balanceDateReview')) $('balanceDateReview').textContent = selectedDocuments.pensionReport?.fields?.balanceDate?.value ? `נכון ל־${selectedDocuments.pensionReport.fields.balanceDate.value}` : '';
+    if ($('depositFeeReview')) $('depositFeeReview').textContent = `${pct(state.fees.depositFee, 2)}%`;
+    if ($('balanceFeeReview')) $('balanceFeeReview').textContent = `${pct(state.fees.annualBalanceFee, 2)}% לשנה`;
     setValue('quickRealReturn', pct(state.returnPhases[0]?.annualReturn || 0));
     setValue('employeeRate', pct(state.contribution.employeeRate, 2));
     setValue('employerRate', pct(state.contribution.employerRate, 2));
@@ -3126,24 +3438,26 @@ main { width: min(1180px, calc(100% - 32px)); padding-top: 44px; }
   }
 
   function applyExtraction(extraction) {
-    const fields = extraction.fields || {};
+    const payslipFields = selectedDocuments.payslip?.fields || {};
+    const reportFields = selectedDocuments.pensionReport?.fields || {};
+    const reconciled = X ? X.reconcile(payslipFields, reportFields) : null;
+    const fields = reconciled?.fields || extraction.fields || {};
     const apply = (sourceField, stateSetter, provenanceName) => {
       const extracted = fields[sourceField];
       if (!extracted || extracted.value == null) return;
       stateSetter(extracted.value);
       fieldSources[provenanceName] = extracted;
     };
-    if (extraction.kind === D.SOURCES.PAYSLIP) {
-      apply('insuredSalary', (value) => { state.profile.pensionableSalary = value; }, 'pensionableSalary');
-      apply('grossSalary', (value) => { state.profile.monthlySalary = value; }, 'monthlySalary');
-      apply('employeeContributionRate', (value) => { state.contribution.employeeRate = value; }, 'employeeContributionRate');
-      apply('employerContributionRate', (value) => { state.contribution.employerRate = value; }, 'employerContributionRate');
-      apply('severanceRate', (value) => { state.contribution.severanceRate = value; }, 'severanceRate');
-    } else {
-      apply('currentBalance', (value) => { state.profile.currentBalance = value; }, 'currentBalance');
-      apply('depositFee', (value) => { state.fees.depositFee = value; }, 'depositFee');
-      apply('balanceFee', (value) => { state.fees.annualBalanceFee = value; }, 'balanceFee');
-    }
+    apply('insuredSalary', (value) => { state.profile.pensionableSalary = value; }, 'pensionableSalary');
+    const gross = payslipFields.grossSalary;
+    if (gross?.value != null) { state.profile.monthlySalary = gross.value; fieldSources.monthlySalary = gross; }
+    apply('employeeContributionRate', (value) => { state.contribution.employeeRate = value; }, 'employeeContributionRate');
+    apply('employerContributionRate', (value) => { state.contribution.employerRate = value; }, 'employerContributionRate');
+    apply('severanceRate', (value) => { state.contribution.severanceRate = value; }, 'severanceRate');
+    apply('currentBalance', (value) => { state.profile.currentBalance = value; }, 'currentBalance');
+    apply('depositManagementFeeRate', (value) => { state.fees.depositFee = value; }, 'depositFee');
+    apply('balanceManagementFeeRate', (value) => { state.fees.annualBalanceFee = value; }, 'balanceFee');
+    if (reconciled?.requiresConfirmation) $('reviewAttention').textContent = 'מצאנו הבדל בין המסמכים. צריך לבדוק את הערך המסומן לפני החישוב.';
     normalizeState();
     renderForm();
   }
@@ -3231,7 +3545,7 @@ main { width: min(1180px, calc(100% - 32px)); padding-top: 44px; }
       'too-many-pages': 'הקובץ ארוך מדי לעיבוד כתלוש. אפשר לבחור תלוש קצר יותר או להמשיך ידנית.',
       'page-limit': 'לא מצאנו את הנתונים בעמודים הראשונים. אפשר להזין אותם ידנית.',
       'ocr-unavailable': 'לא הצלחנו להפעיל את הקריאה המקומית. אפשר להמשיך ידנית.',
-      'wrong-document': kind === D.SOURCES.PAYSLIP ? 'זה לא נראה כמו תלוש שכר. אפשר לבחור קובץ אחר או להמשיך ידנית.' : 'זה לא נראה כמו דוח שנתי מקרן פנסיה. אפשר לבחור קובץ אחר או להמשיך ידנית.',
+      'wrong-document': kind === D.SOURCES.PAYSLIP ? 'זה לא נראה כמו תלוש שכר. אפשר לבחור קובץ אחר או להמשיך ידנית.' : 'זה לא נראה כמו דוח מקרן פנסיה. אפשר לבחור קובץ אחר או להמשיך ידנית.',
     };
     $(statusId).textContent = identified
       ? `${file.name} · זוהו ${identified} נתונים לבדיקה`

@@ -3,6 +3,7 @@
 
   const E = window.PensionEngine;
   const D = window.PensionDocuments;
+  const X = window.PensionInputReconciler;
   const $ = (id) => document.getElementById(id);
   const storageKey = 'pension-lab-he-session-state-v3';
   const flowStorageKey = 'pension-lab-he-session-flow-v1';
@@ -47,7 +48,7 @@
   let lastChanged = 'initial';
   const sourceLabels = Object.freeze({
     system: 'הנחת מערכת', payslip: 'מהתלוש', payslipDerived: 'חושב מהתלוש',
-    pensionReport: 'מדוח הפנסיה', pensionReportDerived: 'חושב מדוח הפנסיה', user: 'שונה על ידך',
+    pensionReport: 'מדוח הפנסיה', pensionReportDerived: 'חושב מדוח הפנסיה', crossValidated: 'אומת מול שני המסמכים', user: 'שונה על ידך',
   });
   const sourceExplanations = Object.freeze({
     system: 'ערך ברירת מחדל של המחשבון. אפשר לשנות אותו בכל רגע.',
@@ -56,6 +57,7 @@
     payslipDerived: 'הערך חושב מנתונים שזוהו בתלוש ואושר.',
     pensionReport: 'הערך זוהה ישירות בדוח הפנסיה ואושר.',
     pensionReportDerived: 'הערך חושב מנתונים שזוהו בדוח הפנסיה ואושר.',
+    crossValidated: 'הערך נתמך באופן בלתי תלוי בתלוש ובדוח הפנסיה.',
   });
   const fieldSources = {
     birthYear: D.field(null), retirementTrack: D.field(null), currentAge: D.field(35), retirementAge: D.field(67), currentBalance: D.field(null),
@@ -119,7 +121,7 @@
       const source = fieldSources[field]?.source || D.SOURCES.SYSTEM;
       return `<div class="provenance-item"><span>${label}</span><strong>${value}</strong><b class="source-badge explainable" tabindex="0" data-source="${source}" data-tooltip="${sourceExplanations[source]}">${sourceLabels[source]}</b></div>`;
     }).join('');
-    const documentCount = items.filter(([, , field]) => ['payslip', 'payslipDerived', 'pensionReport', 'pensionReportDerived'].includes(fieldSources[field]?.source)).length;
+    const documentCount = items.filter(([, , field]) => ['payslip', 'payslipDerived', 'pensionReport', 'pensionReportDerived', 'crossValidated'].includes(fieldSources[field]?.source)).length;
     const systemCount = items.filter(([, , field]) => (fieldSources[field]?.source || D.SOURCES.SYSTEM) === D.SOURCES.SYSTEM).length;
     if ($('sourceSummaryText')) $('sourceSummaryText').textContent = `${documentCount} נתונים מהמסמכים · ${systemCount} הנחות מערכת · מאיפה הגיעו המספרים?`;
   }
@@ -461,6 +463,9 @@
     setValue('currentBalance', Math.round(state.profile.currentBalance));
     setValue('monthlySalary', Math.round(state.profile.monthlySalary));
     setValue('pensionableSalary', Math.round(state.profile.pensionableSalary));
+    if ($('balanceDateReview')) $('balanceDateReview').textContent = selectedDocuments.pensionReport?.fields?.balanceDate?.value ? `נכון ל־${selectedDocuments.pensionReport.fields.balanceDate.value}` : '';
+    if ($('depositFeeReview')) $('depositFeeReview').textContent = `${pct(state.fees.depositFee, 2)}%`;
+    if ($('balanceFeeReview')) $('balanceFeeReview').textContent = `${pct(state.fees.annualBalanceFee, 2)}% לשנה`;
     setValue('quickRealReturn', pct(state.returnPhases[0]?.annualReturn || 0));
     setValue('employeeRate', pct(state.contribution.employeeRate, 2));
     setValue('employerRate', pct(state.contribution.employerRate, 2));
@@ -1178,24 +1183,26 @@
   }
 
   function applyExtraction(extraction) {
-    const fields = extraction.fields || {};
+    const payslipFields = selectedDocuments.payslip?.fields || {};
+    const reportFields = selectedDocuments.pensionReport?.fields || {};
+    const reconciled = X ? X.reconcile(payslipFields, reportFields) : null;
+    const fields = reconciled?.fields || extraction.fields || {};
     const apply = (sourceField, stateSetter, provenanceName) => {
       const extracted = fields[sourceField];
       if (!extracted || extracted.value == null) return;
       stateSetter(extracted.value);
       fieldSources[provenanceName] = extracted;
     };
-    if (extraction.kind === D.SOURCES.PAYSLIP) {
-      apply('insuredSalary', (value) => { state.profile.pensionableSalary = value; }, 'pensionableSalary');
-      apply('grossSalary', (value) => { state.profile.monthlySalary = value; }, 'monthlySalary');
-      apply('employeeContributionRate', (value) => { state.contribution.employeeRate = value; }, 'employeeContributionRate');
-      apply('employerContributionRate', (value) => { state.contribution.employerRate = value; }, 'employerContributionRate');
-      apply('severanceRate', (value) => { state.contribution.severanceRate = value; }, 'severanceRate');
-    } else {
-      apply('currentBalance', (value) => { state.profile.currentBalance = value; }, 'currentBalance');
-      apply('depositFee', (value) => { state.fees.depositFee = value; }, 'depositFee');
-      apply('balanceFee', (value) => { state.fees.annualBalanceFee = value; }, 'balanceFee');
-    }
+    apply('insuredSalary', (value) => { state.profile.pensionableSalary = value; }, 'pensionableSalary');
+    const gross = payslipFields.grossSalary;
+    if (gross?.value != null) { state.profile.monthlySalary = gross.value; fieldSources.monthlySalary = gross; }
+    apply('employeeContributionRate', (value) => { state.contribution.employeeRate = value; }, 'employeeContributionRate');
+    apply('employerContributionRate', (value) => { state.contribution.employerRate = value; }, 'employerContributionRate');
+    apply('severanceRate', (value) => { state.contribution.severanceRate = value; }, 'severanceRate');
+    apply('currentBalance', (value) => { state.profile.currentBalance = value; }, 'currentBalance');
+    apply('depositManagementFeeRate', (value) => { state.fees.depositFee = value; }, 'depositFee');
+    apply('balanceManagementFeeRate', (value) => { state.fees.annualBalanceFee = value; }, 'balanceFee');
+    if (reconciled?.requiresConfirmation) $('reviewAttention').textContent = 'מצאנו הבדל בין המסמכים. צריך לבדוק את הערך המסומן לפני החישוב.';
     normalizeState();
     renderForm();
   }
@@ -1283,7 +1290,7 @@
       'too-many-pages': 'הקובץ ארוך מדי לעיבוד כתלוש. אפשר לבחור תלוש קצר יותר או להמשיך ידנית.',
       'page-limit': 'לא מצאנו את הנתונים בעמודים הראשונים. אפשר להזין אותם ידנית.',
       'ocr-unavailable': 'לא הצלחנו להפעיל את הקריאה המקומית. אפשר להמשיך ידנית.',
-      'wrong-document': kind === D.SOURCES.PAYSLIP ? 'זה לא נראה כמו תלוש שכר. אפשר לבחור קובץ אחר או להמשיך ידנית.' : 'זה לא נראה כמו דוח שנתי מקרן פנסיה. אפשר לבחור קובץ אחר או להמשיך ידנית.',
+      'wrong-document': kind === D.SOURCES.PAYSLIP ? 'זה לא נראה כמו תלוש שכר. אפשר לבחור קובץ אחר או להמשיך ידנית.' : 'זה לא נראה כמו דוח מקרן פנסיה. אפשר לבחור קובץ אחר או להמשיך ידנית.',
     };
     $(statusId).textContent = identified
       ? `${file.name} · זוהו ${identified} נתונים לבדיקה`

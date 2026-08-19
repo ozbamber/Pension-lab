@@ -2,6 +2,8 @@
 
 Reviewed: **2026-08-19**.
 
+Document reconciliation adds 8 deterministic tests for numeric normalization, the 925 regression, closing balance, personal versus average fees, chronology, recurring rows, RTL ordering, derived/non-standard rates, agreement, and conflicts. Private acceptance files remain ignored and only normalized values are compared.
+
 ## Completed
 
 - `node tests.js`: **23/23 calculation-engine tests passed**.
