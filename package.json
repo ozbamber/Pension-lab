@@ -1,0 +1,17 @@
+{
+  "name": "pension-lab",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build-dist.js",
+    "build:standalone": "node scripts/build-standalone.js",
+    "check:standalone": "node scripts/validate-standalone.js",
+    "test:engine": "node tests/engine/engine.test.js",
+    "test:documents": "node tests/documents/document-extraction.test.js",
+    "test:ocr": "node tests/documents/ocr-parser.test.js",
+    "test:pension": "node tests/documents/pension-report.test.js",
+    "test:browser:ocr": "node tests/browser/ocr-browser.test.js",
+    "test:browser:smoke": "node tests/browser/browser-smoke.js",
+    "test:core": "npm run test:engine && npm run test:documents && npm run test:ocr && npm run test:pension"
+  }
+}

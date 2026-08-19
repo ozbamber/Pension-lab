@@ -1,4 +1,17 @@
 .wrangler/
-Pension-Lab-Codex-Handoff/cloudflare-pages-dist/.wrangler/
-Pension-Lab-Codex-Handoff/sites-app/
-Pension-Lab-Codex-Handoff/private-qa/
+dist/
+qa-output/
+tmp/
+private-qa/
+legacy/sites-app/
+
+# Private document and extraction artifacts must stay local.
+tests/fixtures/private/
+**/*.real.pdf
+**/*.private.pdf
+**/*private*.pdf
+**/*acceptance*.pdf
+extracted-text/
+ocr-output/
+*.ocr.txt
+*.extracted.txt
