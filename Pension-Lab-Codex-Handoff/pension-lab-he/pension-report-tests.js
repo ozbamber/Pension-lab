@@ -55,6 +55,15 @@ test('report selects closing balance and personal percentage fees', () => {
   assert.notStrictEqual(parsed.fields.depositManagementFeeRate.value, 414);
 });
 
+test('token-stream fee extraction keeps deposit and balance rates distinct', () => {
+  const fees = R.parseManagementFeesFromTokens({ pages: [{ pageNumber: 1, tokens: [
+    { text: 'deposit fee 0.80%', x: 0, y: 20, page: 1 },
+    { text: 'balance fee 0.16%', x: 0, y: 10, page: 1 },
+  ] }] });
+  near(fees.depositManagementFeeRate.value, 0.008);
+  near(fees.balanceManagementFeeRate.value, 0.0016);
+});
+
 test('report chronology and recurring rows select latest contribution structure', () => {
   const parsed = R.parsePensionReport(report);
   assert.strictEqual(parsed.fields.latestReportedPensionableSalary.value, 23500);

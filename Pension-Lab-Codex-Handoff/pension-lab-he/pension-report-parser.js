@@ -160,13 +160,16 @@
     const output = {};
     for (let index = 0; index < tokens.length; index += 1) {
       const labelContext = tokens.slice(index, index + 3).map((token) => token.text).join(' ');
+      const directLabel = tokens[index].text;
       const valueContext = tokens.slice(index, index + 8).map((token) => token.text).join(' ');
       const percentages = percentageFragments(valueContext);
       if (!percentages.length) continue;
       const value = F.normalizeFinancialValue(percentages[0], { kind: 'rate' }).value;
       if (value == null || value > 0.2) continue;
-      if (!output.depositManagementFeeRate && containsAlias(labelContext, ALIASES.depositFee)) output.depositManagementFeeRate = { value, page: tokens[index].page };
-      if (!output.balanceManagementFeeRate && containsAlias(labelContext, ALIASES.balanceFee)) output.balanceManagementFeeRate = { value, page: tokens[index].page };
+      const directDeposit = containsAlias(directLabel, ALIASES.depositFee);
+      const directBalance = containsAlias(directLabel, ALIASES.balanceFee);
+      if (!output.depositManagementFeeRate && (directDeposit || (!directBalance && containsAlias(labelContext, ALIASES.depositFee)))) output.depositManagementFeeRate = { value, page: tokens[index].page };
+      if (!output.balanceManagementFeeRate && (directBalance || (!directDeposit && containsAlias(labelContext, ALIASES.balanceFee)))) output.balanceManagementFeeRate = { value, page: tokens[index].page };
       if (output.depositManagementFeeRate && output.balanceManagementFeeRate) break;
     }
     return output;
