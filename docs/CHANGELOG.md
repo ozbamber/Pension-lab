@@ -1,5 +1,15 @@
 # יומן שינויים
 
+## Canonical repository and coherent document detection — 2026-08-19
+
+- Consolidated the active source into root-level `app/`, `tests/`, `scripts/`, and `docs/`; moved historical handoff material to `legacy/`.
+- Removed tracked deployment and standalone duplicates. `dist/` is generated from the single `app/` source tree.
+- Replaced independent nearest-number selection with bounded candidate generation and a global salary/contribution tuple evaluator.
+- Added observation reuse prevention, monthly/annual context, financial-identity scoring, ambiguity review, and conservative rejected-conflict handling.
+- Reworked management-fee selection around semantic type, geometry, and personal-versus-average context.
+- Preserved report provider/date/history metadata and cross-document provenance when report evidence supplies a missing payslip field.
+- Expanded adversarial regressions for false neighbors, annual/YTD values, impossible tuples, ambiguity, OCR corruption, fee confusion, and cross-document supply/conflict.
+
 ## Pension report reconciliation — 2026-08-19
 
 - Added native-text pension report extraction for closing balance, personal management fees, contribution history, chronology, recurring-month evidence, and derived rates.

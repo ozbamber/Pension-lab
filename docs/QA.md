@@ -2,15 +2,19 @@
 
 Reviewed: **2026-08-19**.
 
-Document reconciliation adds 8 deterministic tests for numeric normalization, the 925 regression, closing balance, personal versus average fees, chronology, recurring rows, RTL ordering, derived/non-standard rates, agreement, and conflicts. Private acceptance files remain ignored and only normalized values are compared.
+The canonical repository and coherent detector were verified with synthetic adversarial cases, browser privacy checks, deterministic builds, and ignored local-only private acceptance. Private source text was never logged; only whitelisted normalized expectations and provenance were compared.
 
 ## Completed
 
-- `node tests.js`: **23/23 calculation-engine tests passed**.
-- `node document-extraction-tests.js`: **10/10 document-model tests passed**.
-- `node ocr-parser-tests.js`: **15/15 OCR/parser tests passed**.
-- `node ocr-browser-tests.js`: **5/5 native-PDF, OCR, privacy, refresh, mobile and cancellation checks passed**.
-- `node browser-smoke.js`: desktop, tablet-width, mobile and 320px mobile flows passed in Chromium.
+- `npm run test:engine`: **23/23 calculation-engine tests passed**.
+- `npm run test:documents`: **10/10 document-model tests passed**.
+- `npm run test:ocr`: **20/20 OCR/parser tests passed**.
+- `npm run test:pension`: **13/13 pension-report/reconciliation tests passed**.
+- `npm run test:browser:ocr`: **5/5 native-PDF, OCR, privacy, refresh, mobile and cancellation groups passed**.
+- `npm run test:browser:smoke`: desktop, tablet-width, mobile and 320px mobile flows passed in Chromium.
+- `npm run build`: generated **219 files** in ignored `dist/` from canonical `app/`.
+- `npm run check:standalone`: **8/8 inline script blocks passed syntax validation**.
+- Ignored local private acceptance passed for the normalized salary, three contribution rates, balance, both fees, and report-supplied employee provenance.
 - Viewports tested at 1440×1000, 822×950, 390×844 and 320×800.
 - The landing screen presents two optional document cards plus a manual path; forecast and advanced controls stay hidden.
 - The review gate requires birth year, statutory retirement track, insured salary, current balance and explicit contribution confirmation.
@@ -28,7 +32,9 @@ Document reconciliation adds 8 deterministic tests for numeric normalization, th
 
 ## Document extraction status
 
-Payslip processing is PDF-only and local in the browser. PDF.js first reads native text and a multi-signal heuristic avoids OCR for healthy text PDFs. Scanned payslip PDFs use one lazy Tesseract.js worker with bundled `heb+eng` data. The parser uses centralized aliases, spatial rows, financial normalization and amount/rate cross-validation. Critical OCR values require review; missing values are not fabricated. Annual-report OCR remains out of scope.
+Payslip processing is PDF-only and local in the browser. PDF.js first reads native text and a multi-signal heuristic avoids OCR for healthy text PDFs. Scanned payslip PDFs use one lazy Tesseract.js worker with bundled `heb+eng` data. The parser retains bounded alternatives and evaluates a global salary/employee/employer/severance tuple using semantic, spatial, confidence, non-reuse, period, and financial-identity signals. Critical OCR values and ambiguous/conflicting alternatives require review; missing values are not fabricated. Annual-report OCR remains out of scope.
+
+Adversarial regressions cover a misleading 925 neighbor, monthly versus annual salary, a complete multi-contribution tuple, impossible relationships, near-tied salaries, missing amount/rate pairs, conflicts, conservative OCR corruption, annual/YTD report rows, personal-versus-average fee confusion, cross-document conflicts, and report supply of a genuinely missing payslip amount.
 
 Two synthetic PDFs are committed: one native-text fixture and one image-only fixture. The acceptance fixture covers insured salary, employee contribution, employer contribution, severance and payslip month. The real browser test confirms the native fixture does not request Tesseract assets and the scanned fixture does.
 
