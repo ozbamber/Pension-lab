@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="description" content="סימולטור פנסיה אינטראקטיבי בעברית" />
+  <meta name="color-scheme" content="light" />
+  <title>תכנון פנסיה | תחזית פשוטה ואמינה</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><div class="logo">₪</div><div><div class="brand-title">Pension Lab</div><div class="brand-sub">תחזית פנסיונית, צעד אחר צעד</div></div></div>
+    <div class="header-actions">
+      <div class="segmented" aria-label="אופן הצגת סכומים">
+        <button type="button" class="segment explainable" data-money-mode="real" aria-pressed="true" data-tooltip="מציג את כוח הקנייה המשוער לאחר התחשבות באינפלציה.">שקלים של היום</button>
+        <button type="button" class="segment explainable" data-money-mode="nominal" aria-pressed="false" data-tooltip="הסכומים כוללים אינפלציה ולכן נראים גבוהים יותר, בלי הבטחה לכוח קנייה גבוה יותר.">שקלים עתידיים</button>
+      </div>
+      <button type="button" id="saveScenarioBtn" class="hidden" tabindex="-1">שמור תרחיש</button>
+      <button type="button" id="resetBtn" class="btn ghost forecast-action hidden">התחלה מחדש</button>
+    </div>
+  </header>
+
+  <main>
+    <div id="sessionRestoreNotice" class="session-notice hidden" role="status">שחזרנו את המספרים שאישרת בלשונית הזו. המסמכים עצמם אינם שמורים.</div>
+    <div id="legacyScenarioNotice" class="session-notice legacy hidden" role="status"><span>נמצאו תרחישים שנשמרו בגרסה קודמת במכשיר הזה. הם לא נטענו לתהליך החדש.</span><div><button type="button" id="dismissLegacyNotice" class="text-button">השאר אותם לעת עתה</button><button type="button" id="deleteLegacyScenarios" class="text-button danger-text">מחק אותם</button></div></div>
+
+    <section id="quickStart" class="onboarding-shell" aria-labelledby="quickStartTitle">
+      <div class="onboarding-copy">
+        <span class="step-label">01 · מסמכים או התחלה ידנית</span>
+        <h1 id="quickStartTitle">כמה צפויה להיות לך בפנסיה?</h1>
+        <p>העלה תלוש שכר אחרון ודוח שנתי מקרן הפנסיה. נזהה נתונים במכשיר שלך, נבקש רק מה שחסר ונציג תחזית ברורה.</p>
+      </div>
+
+      <div class="upload-grid" aria-label="בחירת מסמכים">
+        <article class="upload-card primary-upload">
+          <div class="upload-icon" aria-hidden="true">01</div>
+          <div><h2>תלוש שכר אחרון</h2><p>משמש לזיהוי השכר שממנו מפקידים, תגמולי עובד, תגמולי מעסיק ופיצויים.</p></div>
+          <label class="btn upload-button" for="salarySlipFile">בחר תלוש<input id="salarySlipFile" type="file" accept="application/pdf,.pdf" /></label>
+          <em id="salarySlipStatus" aria-live="polite">כרגע אפשר להעלות תלוש בפורמט PDF.</em>
+          <div id="salarySlipProcessing" class="document-processing hidden" role="status" aria-live="polite">
+            <div><strong id="salarySlipProcessingTitle">קוראים את התלוש…</strong><span id="salarySlipProcessingDetail">מזהים שכר והפקדות</span></div>
+            <div class="processing-track" aria-hidden="true"><i id="salarySlipProcessingBar"></i></div>
+            <button type="button" id="cancelPayslipProcessing" class="text-button">בטל</button>
+          </div>
+        </article>
+        <article class="upload-card">
+          <div class="upload-icon" aria-hidden="true">02</div>
+          <div><h2>דוח שנתי מקרן הפנסיה</h2><p>משמש לזיהוי הסכום שכבר חסכת, דמי ניהול ופרטי פנסיה נוספים.</p></div>
+          <label class="btn upload-button" for="pensionReportFile">בחר דוח שנתי<input id="pensionReportFile" type="file" accept="application/pdf,image/jpeg,image/png" /></label>
+          <em id="pensionReportStatus" aria-live="polite">PDF, JPG או PNG</em>
+          <details class="document-help"><summary>איפה מוצאים את הדוח השנתי?</summary><p>באזור האישי של הגוף הפנסיוני, תחת דוחות או מסמכים. אפשר גם לחפש במייל “דוח שנתי” יחד עם שם הגוף הפנסיוני.</p></details>
+        </article>
+      </div>
+
+      <p class="privacy-note"><strong>העיבוד נשאר מקומי.</strong> המסמכים והנתונים הפיננסיים שלך אינם נשלחים לשרת לצורך הפענוח או החישוב.</p>
+      <div class="onboarding-actions">
+        <button type="button" id="continueToReviewBtn" class="btn primary-large">המשך לבדיקת הנתונים</button>
+        <button type="button" id="manualFlowBtn" class="text-button">אין לי מסמכים — אמשיך ידנית</button>
+      </div>
+    </section>
+
+    <section id="reviewShell" class="review-shell hidden" aria-labelledby="reviewTitle">
+      <div class="section-intro compact-intro"><span class="step-label">02 · בדיקה קצרה</span><h2 id="reviewTitle">בדקנו את המסמכים</h2><p id="reviewSummary">צריך להשלים כמה פרטים לפני החישוב.</p></div>
+      <div id="reviewAttention" class="attention-note" role="status">הנתונים שדורשים תשומת לב מופיעים ראשונים.</div>
+
+      <div class="review-list">
+        <article class="review-item critical-item">
+          <div class="review-item-heading"><div><h3>באיזו שנה נולדת?</h3><small>אין צורך בתאריך לידה מלא.</small></div><b class="source-badge" data-source-for="birthYear"></b></div>
+          <label class="field"><span>שנת לידה</span><input id="birthYear" type="number" min="1940" max="2010" step="1" inputmode="numeric" aria-describedby="birthYearError" /></label>
+          <p id="birthYearError" class="field-error hidden"></p>
+        </article>
+        <article class="review-item critical-item">
+          <div class="review-item-heading"><div><h3>מין לצורך חישוב גיל הפרישה</h3><small>משמש רק לקביעת גיל הפרישה הסטטוטורי כברירת מחדל, וניתן לשינוי בהמשך.</small></div><b class="source-badge" data-source-for="retirementTrack"></b></div>
+          <div class="choice-row" role="group" aria-label="מין לצורך חישוב גיל הפרישה">
+            <button type="button" data-retirement-track="male">גבר</button>
+            <button type="button" data-retirement-track="female">אישה</button>
+          </div>
+          <input id="currentAge" type="hidden" />
+          <p id="calculatedRetirementAge" class="calculation-note">גיל הפרישה יחושב לאחר הבחירה.</p>
+        </article>
+        <article class="review-item critical-item">
+          <div class="review-item-heading"><div><h3>השכר שממנו מפקידים לך לפנסיה</h3><small>שכר מבוטח · יכול להיות נמוך מהברוטו שמופיע בתלוש.</small></div><b class="source-badge" data-source-for="pensionableSalary"></b></div>
+          <label class="money-input large-input"><span>₪</span><input id="pensionableSalary" type="number" min="0" step="500" inputmode="numeric" aria-label="שכר מבוטח" aria-describedby="pensionableSalaryError" /></label>
+          <p id="pensionableSalaryError" class="field-error hidden"></p>
+        </article>
+        <article class="review-item critical-item">
+          <div class="review-item-heading"><div><h3>הסכום שכבר חסכת</h3><small>יתרה נוכחית בכל החיסכון שנכלל בתחזית.</small></div><b class="source-badge" data-source-for="currentBalance"></b></div>
+          <label class="money-input large-input"><span>₪</span><input id="currentBalance" type="number" min="0" step="1000" inputmode="numeric" aria-label="יתרה נוכחית" aria-describedby="currentBalanceError" /></label>
+          <p id="currentBalanceError" class="field-error hidden"></p>
+        </article>
+        <article class="review-item contribution-review">
+          <div class="review-item-heading"><div><h3>הפקדות חודשיות</h3><small>אם אין נתון מהתלוש, אפשר לאשר את הנחות המערכת או לשנות אותן.</small></div><b class="source-badge" data-source-for="employeeContributionRate"></b></div>
+          <div id="contributionPercentFields" class="field-grid three compact-grid">
+            <label class="field"><span>הכסף שאתה מפקיד <small>תגמולי עובד</small></span><div class="percent-input"><input id="employeeRate" type="number" step="0.01" min="0" max="30" inputmode="decimal"/><span>%</span></div></label>
+            <label class="field"><span>הכסף שהמעסיק מפקיד <small>תגמולי מעסיק</small></span><div class="percent-input"><input id="employerRate" type="number" step="0.01" min="0" max="30" inputmode="decimal"/><span>%</span></div></label>
+            <label class="field"><span>פיצויים</span><div class="percent-input"><input id="severanceRate" type="number" step="0.01" min="0" max="30" inputmode="decimal"/><span>%</span></div></label>
+          </div>
+          <label class="confirm-line"><input id="confirmContributionDefaults" type="checkbox" /> <span>בדקתי את האחוזים ואפשר לחשב לפיהם</span></label>
+          <p id="contributionError" class="field-error hidden"></p>
+        </article>
+        <article class="review-item">
+          <div><h3>יש לך חיסכון פנסיוני נוסף?</h3><small>לדוגמה קרן ישנה, ביטוח מנהלים או חיסכון ממקום עבודה קודם.</small></div>
+          <div class="choice-row" role="group" aria-label="חיסכון פנסיוני נוסף"><button type="button" data-additional-savings="no">לא</button><button type="button" data-additional-savings="yes">כן</button><button type="button" data-additional-savings="unsure">לא בטוח</button></div>
+          <label id="additionalBalanceField" class="field hidden"><span>יתרה נוספת נוכחית</span><div class="money-input"><span>₪</span><input id="additionalBalance" type="number" min="0" step="1000" inputmode="numeric" /></div></label>
+          <p id="additionalSavingsNote" class="inline-note hidden">התחזית אינה כוללת חיסכונות פנסיוניים נוספים שייתכן שקיימים.</p>
+        </article>
+      </div>
+      <input id="quickRealReturn" type="hidden" value="4" />
+      <div class="review-actions"><button type="button" id="generateForecastBtn" class="btn primary-large">חשב תחזית ראשונית</button><button type="button" id="backToDocumentsBtn" class="text-button">חזרה למסמכים</button></div>
+    </section>
+
+    <section id="forecastShell" class="forecast-shell hidden" aria-labelledby="forecastTitle">
+      <div class="forecast-heading"><div><span class="step-label">03 · התוצאה</span><h2 id="forecastTitle">התחזית הראשונית שלך</h2><p id="forecastSummary">התחזית חושבה לפי הנתונים שאישרת והנחות המערכת שמוצגות כאן.</p><p id="moneyModeHelp" class="mode-help">שקלים של היום מציגים כוח קנייה משוער לאחר התחשבות באינפלציה.</p></div></div>
+      <section class="result-grid forecast-results" aria-label="תוצאות מרכזיות">
+        <article class="result-card hero-card"><span class="result-label">קצבה חודשית משוערת לפני מס</span><strong id="headlinePension" class="result-value">—</strong><span id="headlinePensionSub" class="result-sub">—</span></article>
+        <article class="result-card"><span class="result-label">צבירה צפויה בפרישה</span><strong id="headlineBalance" class="result-value small">—</strong><span id="headlineBalanceSub" class="result-sub">—</span></article>
+        <article class="result-card"><span class="result-label">גיל פרישה</span><strong id="forecastRetirementAge" class="result-value small">—</strong><span id="retirementAgeText" class="result-sub">—</span></article>
+        <article class="result-card"><span class="result-label">זמן עד הפרישה</span><strong id="yearsToRetirement" class="result-value small">—</strong><span class="result-sub">לפי שנת הלידה שהוזנה</span></article>
+      </section>
+      <section class="assumptions-strip" aria-labelledby="assumptionsTitle"><div><span class="eyebrow">התחזית מבוססת כרגע על</span><h3 id="assumptionsTitle">הנחות גלויות</h3></div><div id="forecastAssumptions" class="assumption-items"></div></section>
+      <details class="source-disclosure"><summary id="sourceSummaryText">מאיפה הגיעו המספרים?</summary><div id="provenanceSummary" class="provenance-strip" aria-label="מקור הנתונים"></div></details>
+      <p id="additionalSavingsWarning" class="attention-note hidden">התחזית אינה כוללת חיסכונות פנסיוניים נוספים שייתכן שקיימים.</p>
+      <div class="forecast-actions"><button type="button" id="improveForecastBtn" class="btn primary-large">שפר את התחזית</button><button type="button" id="compareScenariosBtn" class="btn secondary-outline">השווה תרחישים</button></div>
+    </section>
+
+    <section id="comparisonPanel" class="comparison-panel hidden" aria-labelledby="comparisonTitle">
+      <div class="section-intro compact-intro"><span class="step-label">השוואה</span><h2 id="comparisonTitle">איך התוצאה משתנה בהנחות תשואה שונות?</h2><p>כל שאר הנתונים וההנחות נשארים זהים.</p></div>
+      <div id="returnComparisonCards" class="comparison-cards"></div>
+      <article class="chart-card comparison-chart-card"><div class="card-heading"><div><span class="eyebrow">צבירה לאורך זמן</span><h3>שלושת תרחישי התשואה</h3></div></div><canvas id="comparisonChart" height="300" role="img" aria-label="השוואת צבירה בתשואה ריאלית של 2, 4 ו-6 אחוזים">גרף השוואת צבירה.</canvas><div id="comparisonFallback" class="comparison-fallback"></div></article>
+    </section>
+
+    <section id="improvePanel" class="improve-panel hidden" aria-labelledby="improveTitle">
+      <div class="section-intro"><span class="step-label">04 · דיוק לפי הצורך</span><h2 id="improveTitle">שפר את התחזית</h2><p>כל שינוי מעדכן את התחזית מיד, בלי לפתוח את כל כלי החישוב.</p></div>
+      <div class="improve-grid">
+        <article class="improve-card"><span class="card-index">01</span><h3>גיל פרישה</h3><label class="field"><span>גיל לחישוב <b class="source-badge" data-source-for="retirementAge"></b></span><input id="retirementAge" type="number" min="19" max="80" step="0.0833333333" inputmode="decimal"/><small id="yearsRemainingHint">—</small></label></article>
+        <article class="improve-card salary-improve"><span class="card-index">02</span><h3>התפתחות השכר</h3><div class="choice-stack salary-options" role="group" aria-label="התפתחות שכר"><button type="button" data-career-path="steady"><strong>0% נומינלי</strong><span>אותו מספר שקלים</span></button><button type="button" data-career-path="inflation"><strong id="salaryInflationOption">2% נומינלי</strong><span>עולה עם האינפלציה</span></button><button type="button" data-career-path="aboveInflation"><strong id="salaryAboveInflationOption">3% נומינלי</strong><span>1% מעל האינפלציה</span></button><button type="button" data-career-path="custom"><strong>התאמה אישית</strong><span>פתיחת שדה מתקדם</span></button></div><p class="card-help">ברירת המחדל: השכר נשאר קבוע במספר השקלים ולכן כוח הקנייה שלו נשחק עם האינפלציה.</p></article>
+        <article class="improve-card return-improve"><span class="card-index">03</span><h3>הנחת תשואה</h3><div class="choice-row return-options" role="group" aria-label="הנחת תשואה ריאלית"><button type="button" data-simple-investment="low"><strong>2%</strong><span>הנחת חישוב נמוכה</span></button><button type="button" data-simple-investment="base"><strong>4%</strong><span>תרחיש בסיס</span></button><button type="button" data-simple-investment="high"><strong>6%</strong><span>הנחת חישוב גבוהה</span></button></div><p class="card-help">ריאלית = תשואה לאחר השפעת האינפלציה. אלו הנחות חישוב, לא הבטחה או המלצה.</p></article>
+        <article class="improve-card break-improve"><span class="card-index">04</span><h3>הפסקות עבודה</h3><p>ברירת המחדל היא שאין הפסקות עבודה.</p><div class="choice-row" role="group"><button type="button" data-simple-break="none">לא צפויות הפסקות</button><button type="button" data-simple-break="yes">הוסף הפסקת עבודה</button></div></article>
+      </div>
+      <button type="button" id="advancedToggleBtn" class="advanced-toggle" aria-expanded="false" aria-controls="advancedShell">הצג הנחות וחישוב מתקדם <span aria-hidden="true">⌄</span></button>
+    </section>
+
+    <section id="advancedShell" class="advanced-shell hidden" aria-labelledby="advancedTitle">
+      <div class="section-intro"><span class="step-label">05 · כלי חישוב מתקדם</span><h2 id="advancedTitle">הנחות וחישוב מתקדם</h2><p>היכולות המלאות של המנוע נשארות זמינות כאן, בחלקים מתקפלים.</p></div>
+      <section class="workspace">
+        <aside class="controls-panel">
+          <div class="panel-heading"><div><span class="eyebrow">הנחות ונתונים</span><h2>בניית התרחיש</h2></div><span class="status-dot"><i></i> מתעדכן בזמן אמת</span></div>
+          <details class="control-section"><summary>פרטים אישיים ופרישה</summary><div class="field-grid two"><label class="field"><span>גיל נוכחי</span><input id="currentAgeDisplay" type="number" readonly aria-readonly="true" /></label><label class="field"><span>גיל פרישה</span><input id="retirementAgeMirror" type="number" readonly aria-readonly="true" /></label></div><p class="section-help">גיל הפרישה חושב לפי שנת הלידה והמסלול שנבחר, וניתן לעריכה בחלק “שפר את התחזית”.</p></details>
+          <details class="control-section"><summary>שכר והפקדות</summary><label class="field"><span>שכר חודשי כולל <b class="source-badge" data-source-for="monthlySalary"></b></span><div class="money-input"><span>₪</span><input id="monthlySalary" type="number" min="0" step="500" inputmode="numeric" /></div><small>ברירת המחדל זהה לשכר המבוטח שאושר.</small></label><div class="segmented full"><button type="button" id="contributionModePercent" class="segment active" aria-pressed="true">לפי אחוזים</button><button type="button" id="contributionModeFixed" class="segment" aria-pressed="false">סכום חודשי</button></div><div id="contributionFixedFields" class="hidden"><label class="field"><span>הפקדה חודשית</span><div class="money-input"><span>₪</span><input id="fixedContribution" type="number" min="0" step="100" inputmode="numeric"/></div></label><label class="toggle-line"><input id="fixedGrowsWithSalary" type="checkbox"/><span>הגדל את ההפקדה ביחס לשכר</span></label></div><div class="calculated-line">הפקדה חודשית משוערת כיום <strong id="currentContributionLabel">—</strong></div></details>
+          <details class="control-section"><summary>התפתחות שכר ושלבי שכר</summary><p class="section-help">ברירת המחדל היא 0% צמיחה נומינלית. השלב האחרון ממשיך עד הפרישה.</p><div id="salaryPhases"></div><button type="button" id="addSalaryPhase" class="btn add">+ הוסף שלב שכר</button></details>
+          <details class="control-section"><summary>תשואות ואינפלציה</summary><label class="field"><span><span class="explainable" tabindex="0" data-tooltip="העלייה הממוצעת במחירים. משמשת להמרה בין שקלים עתידיים לכוח הקנייה של היום.">אינפלציה שנתית ממוצעת</span> <b class="source-badge" data-source-for="inflation"></b></span><div class="slider-pair"><input id="inflationRange" type="range" min="0" max="10" step="0.1" aria-label="אינפלציה שנתית ממוצעת"/><div class="percent-input narrow"><input id="inflation" type="number" min="0" max="10" step="0.1" inputmode="decimal"/><span>%</span></div></div><small>הנחת אינפלציה: 2%. בתוך טווח יעד האינפלציה של בנק ישראל — לא תחזית.</small></label><div id="returnPhases"></div><button type="button" id="addReturnPhase" class="btn add">+ הוסף שלב תשואה</button></details>
+          <details class="control-section"><summary>דמי ניהול</summary><div class="field-grid two"><label class="field"><span><span class="explainable" tabindex="0" data-tooltip="אחוז שנגבה בכל שנה מהסכום שכבר נצבר.">מהצבירה לשנה</span> <b class="source-badge" data-source-for="balanceFee"></b></span><div class="percent-input"><input id="annualBalanceFee" type="number" min="0" max="5" step="0.05" inputmode="decimal"/><span>%</span></div><small>אחוז שנגבה בכל שנה מהסכום שכבר נצבר.</small></label><label class="field"><span><span class="explainable" tabindex="0" data-tooltip="אחוז שנגבה מכל הפקדה חדשה.">מההפקדה</span> <b class="source-badge" data-source-for="depositFee"></b></span><div class="percent-input"><input id="depositFee" type="number" min="0" max="10" step="0.05" inputmode="decimal"/><span>%</span></div><small>אחוז שנגבה מכל הפקדה חדשה.</small></label></div></details>
+          <details class="control-section"><summary>הפסקות עבודה</summary><p class="section-help">רק לאחר הוספה מוצגים גיל התחלה, משך והפקדה בתקופה.</p><div id="careerBreaks"></div><button type="button" id="addCareerBreak" class="btn add">+ הוסף הפסקת עבודה</button></details>
+          <details class="control-section"><summary>מקדם קצבה</summary><label class="field"><span><span class="explainable" tabindex="0" data-tooltip="מספר שמשמש להמרת הצבירה לקצבה חודשית משוערת. המקדם בפועל בעת הפרישה יכול להיות שונה.">מקדם להמרת צבירה לקצבה</span> <b class="source-badge" data-source-for="coefficient"></b></span><div class="slider-pair"><input id="coefficientRange" type="range" min="100" max="400" step="1" aria-label="מקדם קצבה"/><input id="coefficient" class="number-box" type="number" min="100" max="400" step="1" inputmode="numeric"/></div><small>המקדם ממיר את הצבירה לקצבה חודשית משוערת. המקדם בפועל בעת הפרישה יכול להיות שונה.</small></label><div id="coefficientSensitivity" class="sensitivity"></div></details>
+          <details class="control-section"><summary>מודל תשואה מובטחת</summary><div class="sub-card"><label class="toggle-line"><input id="blendProtected" type="checkbox"/><span>הדגם רכיב תשואה מובטחת כקירוב תכנוני</span></label><div id="protectedFields" class="hidden"><div class="field-grid two"><label class="field"><span>משקל הרכיב</span><div class="percent-input"><input id="protectedWeight" type="number" min="0" max="100" step="1"/><span>%</span></div></label><label class="field"><span>תשואה ריאלית לייחוס</span><div class="percent-input"><input id="protectedReturn" type="number" min="0" max="15" step="0.05"/><span>%</span></div></label></div><small>זהו מודל תכנוני בלבד. המנגנון, ההקצאה והזכאות עשויים להשתנות.</small></div></div></details>
+          <details class="control-section"><summary>מסמכים ומקורות נתונים</summary><p class="section-help">שמות הקבצים מוצגים רק בזמן שהלשונית פתוחה. הקבצים עצמם אינם נשמרים.</p><div id="activeDocumentSummary" class="document-session-summary"></div></details>
+        </aside>
+        <section class="visual-panel">
+          <article class="chart-card sticky-chart"><div class="card-heading"><div><span class="eyebrow">הצטברות לאורך זמן</span><h2>איך הסכום משתנה?</h2></div><span id="chartModeLabel" class="pill">בשקלים של היום</span></div><canvas id="balanceChart" height="300" role="img" aria-label="גרף התפתחות הצבירה">גרף התפתחות הצבירה לאורך זמן.</canvas><div class="chart-legend"><span><i class="legend-dot base"></i> צבירה</span><span id="chartFinalLabel">—</span></div></article>
+          <article class="insight-card" id="primaryInsight"><span class="eyebrow">מה השתנה בחישוב</span><h3 id="insightTitle">—</h3><p id="insightText">—</p></article>
+          <article class="chart-card"><div class="card-heading"><div><span class="eyebrow">Explorer</span><h2>מה משתנה כשמחשבים גיל פרישה אחר?</h2></div></div><canvas id="retirementChart" height="260" role="img" aria-label="קצבה חודשית לפי גיל פרישה">גרף קצבה חודשית לפי גיל פרישה.</canvas><div id="retirementAgeTable" class="age-table"></div></article>
+          <article class="chart-card"><div class="card-heading"><div><span class="eyebrow">פירוט</span><h2>איך החישוב מורכב?</h2></div></div><div id="explainResult" class="explain-grid"></div></article>
+        </section>
+      </section>
+      <section class="scenario-section hidden" aria-hidden="true"><button type="button" id="clearScenariosBtn">מחק תרחישים שמורים</button><div id="savedScenarios"></div><div id="comparisonTableWrap"></div></section>
+    </section>
+
+    <section class="disclaimer"><strong>חשוב לדעת</strong><p>זו תחזית המבוססת על הנתונים וההנחות שמופיעים כאן. תשואות, שכר, אינפלציה, דמי ניהול, תנאי הפרישה והרגולציה יכולים להשתנות, ולכן התוצאה בפועל עשויה להיות שונה.</p><details><summary>איך החישוב עובד?</summary><p>המנוע מחשב הפקדות וצמיחה חודש אחר חודש, מנכה דמי ניהול, ממיר לשקלים של היום לפי האינפלציה ומחלק את הצבירה המשוערת במקדם הקצבה. זהו כלי לתרחישים ולא ייעוץ.</p></details></section>
+  </main>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="engine.js"></script>
+  <script src="financial-normalizer.js"></script>
+  <script src="payslip-parser.js"></script>
+  <script src="local-document-pipeline.js"></script>
+  <script src="document-extraction.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

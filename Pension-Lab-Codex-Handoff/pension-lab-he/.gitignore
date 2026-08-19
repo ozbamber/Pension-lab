@@ -1,0 +1,6 @@
+qa-output/
+tmp/
+.wrangler/
+tests/fixtures/private/
+tests/fixtures/**/*.real.pdf
+tests/fixtures/**/*.private.pdf
