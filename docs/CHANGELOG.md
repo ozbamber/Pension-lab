@@ -1,5 +1,12 @@
 # יומן שינויים
 
+## Payslip period candidate detection — 2026-08-20
+
+- Replaced first-match payslip month extraction with candidate generation and semantic/spatial scoring across all MM/YYYY values.
+- Added positive payroll-period context, negative employment/seniority/birth/document-date context, and conservative confidence for unresolved ambiguity.
+- Prevented unreliable explicit payslip periods from chronology-resolving conflicting report values without review.
+- Added regressions for misleading dates, ambiguous dates, and preserved newer-payslip/newer-report chronology.
+
 ## Standalone and evidence-coherence hardening — 2026-08-20
 
 - Corrected generated-standalone asset resolution so PDF.js, cmap/font/wasm support, Tesseract, and tessdata load from the adjacent `dist/vendor/` tree.

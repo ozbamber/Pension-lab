@@ -8,8 +8,8 @@ The canonical repository and coherent detector were verified with synthetic adve
 
 - `npm run test:engine`: **23/23 calculation-engine tests passed**.
 - `npm run test:documents`: **10/10 document-model tests passed**.
-- `npm run test:ocr`: **25/25 OCR/parser tests passed**.
-- `npm run test:pension`: **16/16 pension-report/reconciliation tests passed**.
+- `npm run test:ocr`: **28/28 OCR/parser tests passed**.
+- `npm run test:pension`: **17/17 pension-report/reconciliation tests passed**.
 - `npm run test:browser:ocr`: **5/5 native-PDF, OCR, privacy, refresh, mobile and cancellation groups passed**.
 - `npm run test:browser:standalone`: **4/4 generated-artifact checks passed**, covering 10 vendor URLs, native PDF, scanned OCR and zero 404/console/runtime/network-load errors.
 - `npm run test:browser:smoke`: desktop, tablet-width, mobile and 320px mobile flows passed in Chromium.
@@ -36,7 +36,7 @@ The canonical repository and coherent detector were verified with synthetic adve
 
 Payslip processing is PDF-only and local in the browser. PDF.js first reads native text and a multi-signal heuristic avoids OCR for healthy text PDFs. Scanned payslip PDFs use one lazy Tesseract.js worker with bundled `heb+eng` data. Every anchor evaluates a bounded own/nearby-row neighborhood, and monthly/YTD context applies to salary and contribution candidates. Structured geometry and flattened OCR fallback are separate observation streams, so fallback IDs cannot bypass non-reuse. The parser evaluates a global salary/employee/employer/severance tuple using semantic, spatial, confidence, non-reuse, period, and financial-identity signals. Critical OCR values and ambiguous/conflicting alternatives require review; missing values are not fabricated. Annual-report OCR remains out of scope.
 
-Adversarial regressions cover a same-row misleading 925 with the true salary on an adjacent spatial row, split-row contribution pairs, monthly versus annual/YTD salary and contribution candidates, a complete multi-contribution tuple, impossible relationships, near-tied salaries, missing amount/rate pairs, conflicts, conservative OCR corruption, annual/YTD report rows, personal-versus-average fee confusion, newer-payslip and newer-report chronology, same-month ambiguity, and report supply of a genuinely missing payslip amount.
+Adversarial regressions cover a same-row misleading 925 with the true salary on an adjacent spatial row, split-row contribution pairs, monthly versus annual/YTD salary and contribution candidates, a complete multi-contribution tuple, impossible relationships, near-tied salaries, missing amount/rate pairs, conflicts, conservative OCR corruption, candidate-based payslip period detection with employment/seniority distractor dates and ambiguous dates, annual/YTD report rows, personal-versus-average fee confusion, newer-payslip and newer-report chronology, same-month ambiguity, and report supply of a genuinely missing payslip amount.
 
 Two synthetic PDFs are committed: one native-text fixture and one image-only fixture. The acceptance fixture covers insured salary, employee contribution, employer contribution, severance and payslip month. The real browser test confirms the native fixture does not request Tesseract assets and the scanned fixture does.
 

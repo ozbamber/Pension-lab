@@ -189,6 +189,24 @@ test('monthly salary wins over an annual cumulative salary through semantics and
   assert.strictEqual(parsed.fields.insuredSalary.value, 23500);
 });
 
+test('salary-period context beats an earlier employment-start date', () => {
+  const parsed = P.parsePayslip('תחילת עבודה 01/2020\nחודש שכר 08/2026\nשכר מבוטח 25,000', { method: 'pdf-text' });
+  assert.strictEqual(parsed.fields.payslipMonth.value, '08/2026');
+  assert.ok(parsed.fields.payslipMonth.confidence >= 0.8);
+  assert.strictEqual(parsed.fields.insuredSalary.sourceDate, '08/2026');
+});
+
+test('salary-period context beats an earlier seniority date', () => {
+  const parsed = P.parsePayslip('וותק 03/2021\nתקופת שכר 07/2026', { method: 'pdf-text' });
+  assert.strictEqual(parsed.fields.payslipMonth.value, '07/2026');
+  assert.ok(parsed.fields.payslipMonth.confidence >= 0.8);
+});
+
+test('unlabelled multiple dates remain below chronology confidence', () => {
+  const parsed = P.parsePayslip('01/2020\n08/2026\nשכר מבוטח 25,000', { method: 'pdf-text' });
+  assert.ok(!parsed.fields.payslipMonth || parsed.fields.payslipMonth.confidence < 0.8);
+});
+
 test('global tuple pairs all contribution roles without reusing numeric observations', () => {
   const parsed = P.parsePayslip([
     'שכר לפנסיה 20,000',

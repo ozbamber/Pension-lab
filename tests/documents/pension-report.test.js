@@ -152,6 +152,19 @@ test('same-month salary conflict remains reviewable when evidence is not decisiv
   assert.strictEqual(result.fields.insuredSalary.evidence.type, 'CROSS_DOCUMENT_CONFLICT');
 });
 
+test('ambiguous payslip dates cannot silently chronology-resolve a conflicting report', () => {
+  const payslip = P.parsePayslip('01/2020\n08/2026\nשכר מבוטח 25,000', { method: 'pdf-text' }).fields;
+  const result = X.reconcile(payslip, {
+    latestReportedPensionableSalary: {
+      value: 23500, confidence: 0.97, origin: 'direct', sourceDate: '05/2026',
+      evidence: { salaryMonth: '05/2026', recurringPattern: { recurring: true } },
+    },
+  });
+  assert.strictEqual(result.requiresConfirmation, true);
+  assert.notStrictEqual(result.fields.insuredSalary.evidence.type, 'CHRONOLOGY_RESOLVED');
+  assert.ok(result.fields.insuredSalary.conflict);
+});
+
 test('non-standard rates are derived from evidence', () => {
   const parsed = R.parsePensionReport('06/2026 20,000 1,100 1,400 1,500 4,000');
   near(parsed.fields.latestEmployeeContributionRate.value, 0.055);

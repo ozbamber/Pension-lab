@@ -77,6 +77,22 @@
       };
     }
 
+    if ((primaryPeriod.value && !primaryPeriod.reliable) || (secondaryPeriod.value && !secondaryPeriod.reliable)) {
+      return {
+        ...primary,
+        sourceDate: primaryPeriod.value || primary.sourceDate || null,
+        confidence: Math.min(primary.confidence || 0.8, 0.78),
+        requiresConfirmation: true,
+        conflict: {
+          primary: primary.value,
+          secondary: secondary.value,
+          primaryPeriod: primaryPeriod.value,
+          secondaryPeriod: secondaryPeriod.value,
+        },
+        evidence: evidence('CROSS_DOCUMENT_CONFLICT'),
+      };
+    }
+
     const primaryStrength = evidenceStrength(primary);
     const secondaryStrength = evidenceStrength(secondary);
     if (Math.abs(primaryStrength - secondaryStrength) >= STRONG_EVIDENCE_MARGIN) {

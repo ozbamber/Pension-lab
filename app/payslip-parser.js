@@ -476,6 +476,63 @@
     fields[rateName] = rate;
   }
 
+  const PERIOD_PATTERN = /(^|[^\d])(0?[1-9]|1[0-2])[\/\.\-](20\d{2})(?!\d)/g;
+  const POSITIVE_PERIOD_CONTEXT = /(?:חודש שכר|חודש משכורת|תקופת שכר|לתקופה|חודש עבודה|payroll month|pay period|salary month|period)/;
+  const NEGATIVE_PERIOD_CONTEXT = /(?:תחילת עבודה|תאריך תחילת עבודה|ותק|תאריך לידה|birth(?:\s+date)?|date of birth|printed|printing|generated|document date|הודפס|הפקה)/;
+
+  function periodCandidates(rows, text) {
+    const sourceRows = rows.length ? rows : buildRows(tokensFromInput(String(text || '')));
+    const candidates = [];
+    sourceRows.forEach((row, rowIndex) => {
+      const rowText = normalizeSearchText(row.directText);
+      PERIOD_PATTERN.lastIndex = 0;
+      let match;
+      while ((match = PERIOD_PATTERN.exec(rowText))) {
+        const value = `${String(match[2]).padStart(2, '0')}/${match[3]}`;
+        const nearby = sourceRows.map((nearRow, nearIndex) => ({ nearRow, nearIndex }))
+          .filter(({ nearRow, nearIndex }) => nearRow.page === row.page &&
+            (Math.abs(nearRow.y - row.y) <= 72 || Math.abs(nearIndex - rowIndex) <= 2))
+          .sort((left, right) => Math.abs(left.nearRow.y - row.y) - Math.abs(right.nearRow.y - row.y))
+          .slice(0, 5);
+        let score = 0.2;
+        let positive = false;
+        let negative = false;
+        for (const { nearRow } of nearby) {
+          const context = nearRow.searchText;
+          const distance = Math.abs(nearRow.y - row.y);
+          if (POSITIVE_PERIOD_CONTEXT.test(context)) {
+            score += nearRow.id === row.id ? 3.1 : Math.max(0.12, 0.55 - distance / 180);
+            if (nearRow.id === row.id) positive = true;
+          }
+          if (NEGATIVE_PERIOD_CONTEXT.test(context)) {
+            score -= nearRow.id === row.id ? 2.8 : Math.max(0.12, 0.5 - distance / 180);
+            if (nearRow.id === row.id) negative = true;
+          }
+        }
+        candidates.push({ value, page: row.page, rowId: row.id, score, positive, negative });
+      }
+    });
+    const grouped = new Map();
+    for (const candidate of candidates) {
+      const existing = grouped.get(candidate.value);
+      if (!existing || candidate.score > existing.score) grouped.set(candidate.value, candidate);
+    }
+    return [...grouped.values()].sort((a, b) => b.score - a.score);
+  }
+
+  function selectPayslipPeriod(rows, text, method) {
+    const candidates = periodCandidates(rows, text);
+    if (!candidates.length) return null;
+    const best = candidates[0];
+    const runnerUp = candidates[1];
+    const margin = runnerUp ? best.score - runnerUp.score : Infinity;
+    const clearlySupported = best.positive && !best.negative && (!runnerUp || margin >= 0.75);
+    const genuinelyAmbiguous = Boolean(runnerUp && margin < 0.75);
+    let confidence = clearlySupported ? (method === 'ocr' ? 0.86 : 0.97) : 0.58;
+    if (genuinelyAmbiguous) confidence = Math.min(confidence, 0.68);
+    return { ...best, confidence, candidates, clearlySupported, genuinelyAmbiguous };
+  }
+
   function extractMonth(text) {
     const match = String(text || '').match(/\b(0?[1-9]|1[0-2])[\/.\-](20\d{2})\b/);
     return match ? `${String(match[1]).padStart(2, '0')}/${match[2]}` : null;
@@ -545,11 +602,16 @@
     }
 
     const combinedText = typeof input === 'string' ? input : (input && input.text) || rows.map((row) => row.directText).join('\n');
-    const month = extractMonth(combinedText);
-    const monthConfidence = method === 'ocr' ? 0.75 : 0.92;
+    const period = selectPayslipPeriod(rows, combinedText, method);
+    const month = period?.value || null;
+    const monthConfidence = period?.confidence || 0;
     if (month) fields.payslipMonth = {
       value: month, unit: 'month', origin: 'direct', confidence: monthConfidence, sourceDate: month,
-      requiresConfirmation: false, evidence: { aliasId: 'month-pattern', page: 1, method, validation: 'format-valid' },
+      requiresConfirmation: !period.clearlySupported, evidence: {
+        aliasId: 'month-pattern', page: period.page, method,
+        validation: period.clearlySupported ? 'semantic-period-context' : 'ambiguous-period-context',
+        sourceDateConfidence: monthConfidence, candidateCount: period.candidates.length,
+      },
     };
     if (month) Object.entries(fields).forEach(([name, item]) => {
       if (name === 'payslipMonth' || !item) return;
