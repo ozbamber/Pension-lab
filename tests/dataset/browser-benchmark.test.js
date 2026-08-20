@@ -167,7 +167,8 @@ function pct(value) { return value == null ? 'n/a' : `${(value * 100).toFixed(1)
       console.log(`[${index + 1}/${records.length}] ${record.id} ${record.family}: ${extraction?.status || 'unknown'} / ${extraction?.method || 'unknown'}`);
     }
 
-    const browserErrors = cdp.events.filter((event) => event.method === 'Runtime.exceptionThrown' || event.method === 'Network.loadingFailed' ||
+    const browserErrors = cdp.events.filter((event) => event.method === 'Runtime.exceptionThrown' ||
+      (event.method === 'Network.loadingFailed' && !(event.params.type === 'Document' && event.params.errorText === 'net::ERR_ABORTED' && event.params.canceled)) ||
       (event.method === 'Runtime.consoleAPICalled' && event.params.type === 'error') || (event.method === 'Log.entryAdded' && event.params.entry.level === 'error'));
     const missing = requests.filter((request) => request.status === 404);
     if (missing.length) throw new Error(`Dataset benchmark produced 404 requests: ${JSON.stringify(missing.slice(0, 10))}`);
@@ -180,6 +181,7 @@ function pct(value) { return value == null ? 'n/a' : `${(value * 100).toFixed(1)
     console.log(`Field accuracy: ${pct(metrics.summary.field_accuracy)}`);
     console.log(`Critical-document accuracy: ${pct(metrics.summary.critical_document_accuracy)}`);
     console.log(`Validation accuracy: ${pct(metrics.summary.validation_accuracy)}`);
+    console.log(`Validation checks: ${metrics.summary.validation_checks_passed}/${metrics.summary.validation_checks_run} passed; ${metrics.summary.validation_checks_run}/${metrics.summary.validation_checks_possible} run; coverage=${pct(metrics.summary.validation_coverage)}`);
     console.log(`Wrote ${output}`);
   } finally {
     if (cdp) cdp.close();

@@ -47,6 +47,7 @@ console.log(`Fast text-layer parser benchmark: ${eligible} eligible documents`);
 console.log(`Field accuracy: ${pct(result.summary.field_accuracy)}`);
 console.log(`Critical-document accuracy: ${pct(result.summary.critical_document_accuracy)}`);
 console.log(`Validation accuracy: ${pct(result.summary.validation_accuracy)}`);
+console.log(`Validation checks: ${result.summary.validation_checks_passed}/${result.summary.validation_checks_run} passed; ${result.summary.validation_checks_run}/${result.summary.validation_checks_possible} run; coverage=${pct(result.summary.validation_coverage)}`);
 console.log('By family:');
 for (const [family, metrics] of Object.entries(result.groups.family)) {
   console.log(`  ${family}: fields=${pct(metrics.field_accuracy)}, critical=${pct(metrics.critical_document_accuracy)}, n=${metrics.documents}`);

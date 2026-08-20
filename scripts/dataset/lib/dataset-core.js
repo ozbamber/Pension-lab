@@ -5,6 +5,61 @@ const path = require('path');
 const crypto = require('crypto');
 
 const SPLIT_NAMES = ['development', 'validation', 'unseen-template-test', 'golden-real-test'];
+const SOURCE_TYPES = ['official', 'public_example', 'consented_real', 'synthetic', 'augmented'];
+const DOCUMENT_TYPES = ['payslip', 'pension_report'];
+const QUALITY_VALUES = ['high', 'degraded'];
+const DIGITAL_OR_SCAN_VALUES = ['digital', 'scan'];
+
+function isPlainObject(value) {
+  return value != null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function validateManifestRecord(record) {
+  const errors = [];
+  const id = record?.id || '<missing-id>';
+  const requireString = (key, options = {}) => {
+    if (typeof record?.[key] !== 'string' || (!options.allowEmpty && !record[key].length)) errors.push(`${id}: ${key} must be a non-empty string`);
+  };
+  if (!isPlainObject(record)) return ['<record>: manifest record must be an object'];
+  if (typeof record.id !== 'string' || !/^pld2-[a-f0-9]{16}$/.test(record.id)) errors.push(`${id}: invalid id format`);
+  if (!DOCUMENT_TYPES.includes(record.document_type)) errors.push(`${id}: invalid document_type`);
+  requireString('path');
+  if (typeof record.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(record.sha256)) errors.push(`${id}: invalid sha256`);
+  if (!SOURCE_TYPES.includes(record.source_type)) errors.push(`${id}: invalid source_type`);
+  requireString('family');
+  if (!SPLIT_NAMES.includes(record.split)) errors.push(`${id}: invalid split`);
+  if (!QUALITY_VALUES.includes(record.quality)) errors.push(`${id}: invalid quality`);
+  if (!DIGITAL_OR_SCAN_VALUES.includes(record.digital_or_scan)) errors.push(`${id}: invalid digital_or_scan`);
+  if (typeof record.has_text_layer !== 'boolean') errors.push(`${id}: has_text_layer must be boolean`);
+  requireString('license_or_consent');
+  if (record.pages !== undefined && record.pages !== null && (!Number.isInteger(record.pages) || record.pages < 1)) errors.push(`${id}: pages must be a positive integer or null`);
+  if (record.source_url !== undefined && record.source_url !== null && typeof record.source_url !== 'string') errors.push(`${id}: source_url must be a string or null`);
+  if (record.parent_document !== undefined && record.parent_document !== null && typeof record.parent_document !== 'string') errors.push(`${id}: parent_document must be a string or null`);
+  if (record.distribution_authorized !== undefined && typeof record.distribution_authorized !== 'boolean') errors.push(`${id}: distribution_authorized must be boolean`);
+  if (record.source_type === 'consented_real' && record.distribution_authorized !== true) errors.push(`${id}: consented_real requires distribution_authorized=true`);
+  return errors;
+}
+
+function validateGroundTruth(groundTruth) {
+  const errors = [];
+  const id = groundTruth?.id || '<missing-id>';
+  if (!isPlainObject(groundTruth)) return ['<ground-truth>: record must be an object'];
+  if (groundTruth.schema_version !== 2) errors.push(`${id}: schema_version must be 2`);
+  if (typeof groundTruth.id !== 'string' || !groundTruth.id.length) errors.push(`${id}: id must be a non-empty string`);
+  if (!DOCUMENT_TYPES.includes(groundTruth.document_type)) errors.push(`${id}: invalid document_type`);
+  const annotation = groundTruth.annotation;
+  if (!isPlainObject(annotation)) return errors.concat(`${id}: annotation must be an object`);
+  for (const key of ['annotated_fields', 'expected_absent_fields']) {
+    if (!Array.isArray(annotation[key]) || annotation[key].some((item) => typeof item !== 'string')) {
+      errors.push(`${id}: annotation.${key} must be an array of strings`);
+    } else if (new Set(annotation[key]).size !== annotation[key].length) {
+      errors.push(`${id}: annotation.${key} contains duplicate fields`);
+    }
+  }
+  if (annotation.evidence !== undefined && !isPlainObject(annotation.evidence)) errors.push(`${id}: annotation.evidence must be an object`);
+  if (annotation.notes !== undefined && typeof annotation.notes !== 'string') errors.push(`${id}: annotation.notes must be a string`);
+  return errors;
+}
 
 const CORE_FIELDS = Object.freeze({
   payslip: [
@@ -123,11 +178,10 @@ function validateDataset(projectRoot, options = {}) {
   const shaSeen = new Map();
 
   for (const record of dataset.records) {
+    errors.push(...validateManifestRecord(record));
     if (!record.id) errors.push('Manifest record is missing id.');
     if (ids.has(record.id)) errors.push(`Duplicate id: ${record.id}`);
     ids.add(record.id);
-    if (!['payslip', 'pension_report'].includes(record.document_type)) errors.push(`${record.id}: unsupported document_type ${record.document_type}`);
-    if (!record.path) errors.push(`${record.id}: missing path`);
     if (pathsSeen.has(record.path)) errors.push(`${record.id}: duplicate path ${record.path}`);
     pathsSeen.add(record.path);
 
@@ -145,6 +199,7 @@ function validateDataset(projectRoot, options = {}) {
     if (!gt) {
       errors.push(`${record.id}: ground truth is missing`);
     } else {
+      errors.push(...validateGroundTruth(gt));
       if (gt.id !== record.id) errors.push(`${record.id}: ground-truth id mismatch`);
       if (gt.document_type !== record.document_type) errors.push(`${record.id}: ground-truth document_type mismatch`);
       const annotated = gt.annotation?.annotated_fields;
@@ -158,9 +213,7 @@ function validateDataset(projectRoot, options = {}) {
       if (!record.parent_document) errors.push(`${record.id}: augmented document is missing parent_document`);
       else if (!dataset.byId.has(record.parent_document)) errors.push(`${record.id}: parent_document does not exist: ${record.parent_document}`);
     }
-    if (['consented_real', 'real'].includes(record.source_type) && !record.distribution_authorized) {
-      errors.push(`${record.id}: real/consented document cannot live in distributable dataset without distribution_authorized=true`);
-    }
+    if (record.source_type === 'consented_real' && record.distribution_authorized !== true) errors.push(`${record.id}: real/consented document cannot live in distributable dataset without distribution_authorized=true`);
     if (!record.family) warnings.push(`${record.id}: family is missing`);
     if (!record.license_or_consent) warnings.push(`${record.id}: license_or_consent is missing`);
   }
@@ -215,6 +268,13 @@ function valueOf(item) {
   return item;
 }
 
+function finiteNumber(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'string' && value.trim() === '') return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
 function adaptPensionLabPrediction(line, record) {
   if (!line) return null;
   if (line.document_type && line.prediction) return line.prediction;
@@ -262,8 +322,8 @@ function toleranceFor(field, expected) {
 function valuesMatch(field, expected, actual) {
   if (expected == null) return actual == null;
   if (typeof expected === 'number') {
-    const numeric = Number(actual);
-    if (!Number.isFinite(numeric)) return false;
+    const numeric = finiteNumber(actual);
+    if (numeric === null) return false;
     const tolerance = toleranceFor(field, expected);
     const difference = Math.abs(expected - numeric);
     return difference <= tolerance.absolute || difference <= Math.max(Math.abs(expected), Math.abs(numeric)) * tolerance.relative;
@@ -274,12 +334,12 @@ function valuesMatch(field, expected, actual) {
 function arithmeticChecks(prediction, documentType) {
   const base = documentType === 'payslip' ? 'pension' : 'latest_contribution';
   const salaryPath = documentType === 'payslip' ? 'salary.pensionable_salary' : 'latest_contribution.salary';
-  const salary = Number(getPath(prediction, salaryPath));
+  const salary = finiteNumber(getPath(prediction, salaryPath));
   const checks = [];
   for (const role of ['employee', 'employer', 'severance']) {
-    const rate = Number(getPath(prediction, `${base}.${role}.rate`));
-    const amount = Number(getPath(prediction, `${base}.${role}.amount`));
-    if (![salary, rate, amount].every(Number.isFinite)) continue;
+    const rate = finiteNumber(getPath(prediction, `${base}.${role}.rate`));
+    const amount = finiteNumber(getPath(prediction, `${base}.${role}.amount`));
+    if ([salary, rate, amount].some((value) => value === null)) continue;
     const expectedAmount = salary * rate;
     const difference = Math.abs(expectedAmount - amount);
     const pass = difference <= 2 || difference <= Math.max(Math.abs(expectedAmount), Math.abs(amount)) * 0.01;
@@ -310,7 +370,8 @@ function evaluatePredictions(projectRoot, predictionLines, options = {}) {
   let criticalCorrect = 0;
   let criticalTotal = 0;
   let validationCorrect = 0;
-  let validationTotal = 0;
+  let validationRun = 0;
+  const validationPossible = selected.length * 3;
   let abstentionCorrect = 0;
   let abstentionTotal = 0;
 
@@ -336,7 +397,7 @@ function evaluatePredictions(projectRoot, predictionLines, options = {}) {
 
     const arithmetic = arithmeticChecks(prediction, record.document_type);
     for (const check of arithmetic) {
-      validationTotal += 1;
+      validationRun += 1;
       if (check.pass) validationCorrect += 1;
     }
 
@@ -366,12 +427,18 @@ function evaluatePredictions(projectRoot, predictionLines, options = {}) {
   function aggregate(records) {
     const fieldRows = records.flatMap((record) => record.fields);
     const arithmetic = records.flatMap((record) => record.arithmetic_checks);
+    const possible = records.length * 3;
+    const run = arithmetic.length;
     return {
       documents: records.length,
       predictions: records.filter((record) => record.has_prediction).length,
       field_accuracy: fieldRows.length ? fieldRows.filter((row) => row.pass).length / fieldRows.length : null,
       critical_document_accuracy: records.length ? records.filter((record) => record.critical_document_pass).length / records.length : null,
-      validation_accuracy: arithmetic.length ? arithmetic.filter((row) => row.pass).length / arithmetic.length : null,
+      validation_accuracy: run ? arithmetic.filter((row) => row.pass).length / run : null,
+      validation_checks_passed: arithmetic.filter((row) => row.pass).length,
+      validation_checks_run: run,
+      validation_checks_possible: possible,
+      validation_coverage: possible ? run / possible : null,
     };
   }
 
@@ -398,7 +465,11 @@ function evaluatePredictions(projectRoot, predictionLines, options = {}) {
       predictions: selected.filter((record) => predictions.has(record.id)).length,
       field_accuracy: fieldTotal ? fieldCorrect / fieldTotal : null,
       critical_document_accuracy: criticalTotal ? criticalCorrect / criticalTotal : null,
-      validation_accuracy: validationTotal ? validationCorrect / validationTotal : null,
+      validation_accuracy: validationRun ? validationCorrect / validationRun : null,
+      validation_checks_passed: validationCorrect,
+      validation_checks_run: validationRun,
+      validation_checks_possible: validationPossible,
+      validation_coverage: validationPossible ? validationRun / validationPossible : null,
       abstention_accuracy: abstentionTotal ? abstentionCorrect / abstentionTotal : null,
       abstention_examples: abstentionTotal,
     },
@@ -416,9 +487,12 @@ module.exports = {
   getPath,
   setPath,
   loadDataset,
+  validateManifestRecord,
+  validateGroundTruth,
   validateDataset,
   adaptPensionLabPrediction,
   valuesMatch,
   arithmeticChecks,
+  finiteNumber,
   evaluatePredictions,
 };

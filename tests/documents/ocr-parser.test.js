@@ -219,6 +219,19 @@ test('month/year fragments are not reused as financial amounts', () => {
   assert.strictEqual(parsed.fields.insuredSalary.value, 18750);
 });
 
+test('all components of a full date are excluded from contribution candidates', () => {
+  const parsed = P.parsePayslip([
+    'employment start date 15/08/2020',
+    'insured salary 20,000',
+    'employee contribution 1,200 6%',
+  ].join('\n'), { method: 'pdf-text' });
+  assert.strictEqual(parsed.fields.insuredSalary.value, 20000);
+  assert.strictEqual(parsed.fields.employeeContributionAmount.value, 1200);
+  assert.ok(!Object.values(parsed.fields).some((item) => item && item.value === 2020));
+  assert.ok(!Object.values(parsed.fields).some((item) => item && item.value === 15));
+  assert.ok(!Object.values(parsed.fields).some((item) => item && item.value === 8));
+});
+
 test('global tuple pairs all contribution roles without reusing numeric observations', () => {
   const parsed = P.parsePayslip([
     'שכר לפנסיה 20,000',

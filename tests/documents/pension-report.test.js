@@ -79,6 +79,30 @@ test('fee selection ignores nearby fund averages and charged currency amounts', 
   near(parsed.fields.balanceManagementFeeRate.value, 0.0016);
 });
 
+test('provider extraction accepts a Hebrew label and provider on the following row', () => {
+  const parsed = R.parsePensionReport([
+    'שם הגוף המוסדי',
+    'מנורה מבטחים פנסיה וגמל בע"מ',
+    'שם העמית עמית בדיקה',
+  ].join('\n'));
+  assert.strictEqual(parsed.fields.pensionProvider.value, 'מנורה מבטחים פנסיה וגמל בע"מ');
+});
+
+test('provider extraction accepts a same-row label and stops before unrelated text', () => {
+  const parsed = R.parsePensionReport('שם הגוף המוסדי: מנורה מבטחים פנסיה וגמל בע"מ | שם העמית: עמית בדיקה');
+  assert.strictEqual(parsed.fields.pensionProvider.value, 'מנורה מבטחים פנסיה וגמל בע"מ');
+});
+
+test('provider extraction uses structured token geometry without absorbing neighboring labels', () => {
+  const parsed = R.parsePensionReport({ pages: [{ pageNumber: 1, tokens: [
+    { text: 'שם הגוף המוסדי', x: 600, y: 20, width: 120, height: 14 },
+    { text: 'מנורה מבטחים פנסיה וגמל בע"מ', x: 300, y: 20, width: 260, height: 14 },
+    { text: 'שם העמית', x: 600, y: 50, width: 90, height: 14 },
+    { text: 'עמית בדיקה', x: 450, y: 50, width: 100, height: 14 },
+  ] }] });
+  assert.strictEqual(parsed.fields.pensionProvider.value, 'מנורה מבטחים פנסיה וגמל בע"מ');
+});
+
 test('report chronology and recurring rows select latest contribution structure', () => {
   const parsed = R.parsePensionReport(report);
   assert.strictEqual(parsed.fields.latestReportedPensionableSalary.value, 23500);

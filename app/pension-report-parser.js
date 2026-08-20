@@ -20,6 +20,11 @@
   function normalized(value) { return P.normalizeSearchText(value); }
   function containsAlias(text, aliases) { const value = normalized(text); return aliases.some((alias) => value.includes(normalized(alias))); }
   function amountFragments(text) { return String(text || '').match(/[-−]?[\dOoIl|]+(?:[.,][\dOoIl|]+)*/g) || []; }
+  function isDateComponent(raw, text) {
+    const value = String(raw || '').replace(/^0+/, '');
+    const dates = String(text || '').match(/(?:[0-3]?\d)[\/\.\-](?:0?[1-9]|1[0-2])[\/\.\-]20\d{2}|(?:0?[1-9]|1[0-2])[\/\.\-]20\d{2}/g) || [];
+    return dates.some((date) => date.split(/[\/\.\-]/).some((part) => value === part.replace(/^0+/, '')));
+  }
   function percentageFragments(text) { return String(text || '').match(/[\dOoIl|]+(?:[.,][\dOoIl|]+)?\s*%/g) || []; }
   function percentageMatches(text) {
     const value = String(text || '');
@@ -41,44 +46,58 @@
     return null;
   }
 
-  function extractProviderByLabel(rows) {
-    for (const row of rows) {
-      if (!containsAlias(row.directText, ALIASES.provider)) continue;
-      for (const source of [row.directText, row.reverseText]) {
-        for (const alias of ALIASES.provider) {
-          const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          const match = String(source).match(new RegExp(`${escaped}\\s*[:|]?\\s*([^|]+)(?:\\|\\s*(\\d+))?`, 'i'));
-          if (!match) continue;
-          const candidate = `${match[1]} ${match[2] || ''}`
-            .split(/(?:שם העמית|גיל פרישה|מספר עמית|member name|retirement age|member id|מהפקדה|מחיסכון|דמי ניהול|annual report|quarterly report)/i)[0]
-            .replace(/[-â€“â€”:]+/g, ' ')
-            .replace(/[^\u0590-\u05ff\da-zA-Z .'-]/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
-          if (candidate.length >= 3 && /[\u0590-\u05ffa-z]/i.test(candidate)) return { value: candidate, page: row.page };
-        }
-      }
+  const PROVIDER_STOP_ALIASES = Object.freeze([
+    'שם העמית', 'גיל פרישה', 'מספר עמית', 'member name', 'retirement age', 'member id',
+    'דמי ניהול', 'מהפקדה', 'מחיסכון', 'מצבירה', 'annual report', 'quarterly report',
+    'report period', 'תקופת הדיווח', 'תאריך הדוח', 'date of report',
+  ]);
+
+  function cleanProviderCandidate(value) {
+    let candidate = String(value || '')
+      .replace(/^[\s:|;,\-–—]+|[\s:|;,\-–—]+$/g, ' ')
+      .replace(/[\u0000-\u001f]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const stop = PROVIDER_STOP_ALIASES
+      .map((alias) => normalized(alias))
+      .filter(Boolean)
+      .sort((a, b) => b.length - a.length);
+    const normalizedCandidate = normalized(candidate);
+    for (const marker of stop) {
+      const index = normalizedCandidate.indexOf(marker);
+      if (index >= 0) candidate = candidate.slice(0, index).trim();
     }
-    for (const row of rows) {
-      const text = normalized(row.directText);
-      const datedSynthetic = text.match(/(קרן\s+פנסיה\s+פיקטיבית|pension\s+fund\s+synthetic)\s*(?:\d{1,2}[./]\d{1,2}[./]20\d{2}\s*[·-]\s*)?(\d+)(?=\s|$)/i);
-      if (datedSynthetic) return { value: `${datedSynthetic[1]} ${datedSynthetic[2]}`, page: row.page };
-      const synthetic = text.match(/((?:קרן\s+פנסיה|pension\s+fund)[^|]*?)\s*[-–]\s*(\d+)\s*(?:דוח|annual|report)/i);
-      if (synthetic) return { value: `${synthetic[1].trim()} ${synthetic[2]}`.replace(/\s+/g, ' '), page: row.page };
-    }
-    return null;
+    candidate = candidate.replace(/^[\s:|;,\-–—]+|[\s:|;,\-–—]+$/g, '').replace(/\s+/g, ' ').trim();
+    if (candidate.length < 3 || !/[\u0590-\u05ffa-z]/i.test(candidate)) return null;
+    if (containsAlias(candidate, ALIASES.provider) || containsAlias(candidate, PROVIDER_STOP_ALIASES)) return null;
+    return candidate;
   }
 
-  function extractProvider(rows) {
+  function providerCandidateAfterLabel(text, alias) {
+    const source = String(text || '');
+    const lower = source.toLocaleLowerCase();
+    const label = String(alias).toLocaleLowerCase();
+    const position = lower.indexOf(label);
+    if (position < 0) return null;
+    const after = cleanProviderCandidate(source.slice(position + alias.length));
+    if (after) return after;
+    return cleanProviderCandidate(source.slice(0, position));
+  }
+
+  function extractProviderByLabel(rows) {
     for (let index = 0; index < rows.length; index += 1) {
       const row = rows[index];
+      for (const source of [row.directText, row.reverseText]) {
+        for (const alias of ALIASES.provider) {
+          const candidate = providerCandidateAfterLabel(source, alias);
+          if (candidate) return { value: candidate, page: row.page };
+        }
+      }
       if (!containsAlias(row.directText, ALIASES.provider)) continue;
-      const contexts = [row.directText, rows[index + 1]?.directText || ''];
-      for (const context of contexts) {
-        let candidate = String(context);
-        for (const alias of ALIASES.provider) candidate = candidate.replace(new RegExp(alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'ig'), ' ');
-        candidate = candidate.replace(/[-–—:|]+/g, ' ').replace(/\b\d[\d.,/%-]*\b/g, ' ').replace(/\s+/g, ' ').trim();
-        if (candidate.length >= 3 && /[\u0590-\u05ffa-z]/i.test(candidate)) return { value: candidate, page: row.page };
+      for (const nextRow of rows.slice(index + 1, index + 3)) {
+        if (containsAlias(nextRow.directText, ALIASES.provider)) continue;
+        const candidate = cleanProviderCandidate(nextRow.directText);
+        if (candidate) return { value: candidate, page: nextRow.page };
       }
     }
     return null;
@@ -90,7 +109,7 @@
       const text = rowText(row);
       const semanticClosing = /סוף/.test(normalized(text)) && /(?:תקופת|דיווח|שנה)/.test(normalized(text));
       if (!containsAlias(text, CLOSING_BALANCE_ALIASES) && !semanticClosing) return;
-      nearbyRows(rows, index, 1).forEach((candidateRow) => amountFragments(rowText(candidateRow)).forEach((raw) => {
+      nearbyRows(rows, index, 1).forEach((candidateRow) => amountFragments(rowText(candidateRow)).filter((raw) => !isDateComponent(raw, rowText(candidateRow))).forEach((raw) => {
         const parsed = F.normalizeFinancialValue(raw, { kind: 'amount' });
         if (parsed.value >= 100 && parsed.value <= 100000000) candidates.push({ value: parsed.value, score: candidateRow === row ? 1 : 0.84, page: row.page });
       }));

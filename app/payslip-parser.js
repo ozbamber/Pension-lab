@@ -126,11 +126,8 @@
   function isDateComponentFragment(raw, tokenText) {
     const value = String(raw || '').replace(/^0+/, '');
     const text = String(tokenText || '');
-    const matches = text.match(/(?:0?[1-9]|1[0-2])[\/\.\-](20\d{2})/g) || [];
-    return matches.some((date) => {
-      const [month, year] = date.split(/[\/\.\-]/);
-      return value === month.replace(/^0+/, '') || value === year;
-    });
+    const matches = text.match(/(?:[0-3]?\d)[\/\.\-](?:0?[1-9]|1[0-2])[\/\.\-]20\d{2}|(?:0?[1-9]|1[0-2])[\/\.\-]20\d{2}/g) || [];
+    return matches.some((date) => date.split(/[\/\.\-]/).some((part) => value === part.replace(/^0+/, '')));
   }
 
   function aliasesFor(fieldName) {

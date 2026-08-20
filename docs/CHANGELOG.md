@@ -111,3 +111,8 @@
 - Added the synthetic/augmented Dataset v2 manifest, ground truth, split validation, text benchmark and 66-document browser benchmark.
 - Added candidate-date regression coverage and prevented split MM/YYYY fragments from being interpreted as financial amounts.
 - Added conservative reporting of dense-layout, flat-text column-association and genuinely missing-field limitations.
+## Generic provider extraction and fail-closed dataset validation — 2026-08-20
+
+- Removed fixture-specific provider-name fallbacks from the production pension parser.
+- Added generic same-row, nearby-row and structured-token provider extraction plus full-date numeric filtering.
+- Added fail-closed manifest/ground-truth contract validation and separate arithmetic validation coverage metrics.
