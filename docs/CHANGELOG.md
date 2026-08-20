@@ -106,3 +106,8 @@
 - חבילת הבדיקות הורחבה מ-10 ל-23 בדיקות מנוע.
 - נוסף `browser-smoke.js` לבדיקת Chromium בדסקטופ ובמובייל, לרבות גלישה אופקית, גרפים, שינוי גיל פרישה, הפסקת עבודה, מעבר בין כסף ריאלי לנומינלי ושמירת תרחיש.
 - נוספו צילומי QA ודו"ח `QA.md`.
+## Dataset v2 coverage and date-fragment safety — 2026-08-20
+
+- Added the synthetic/augmented Dataset v2 manifest, ground truth, split validation, text benchmark and 66-document browser benchmark.
+- Added candidate-date regression coverage and prevented split MM/YYYY fragments from being interpreted as financial amounts.
+- Added conservative reporting of dense-layout, flat-text column-association and genuinely missing-field limitations.

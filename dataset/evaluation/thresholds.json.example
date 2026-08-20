@@ -1,0 +1,9 @@
+{
+  "note": "Do not set production gates from the synthetic-only v2 import. Establish thresholds after golden-real-test contains enough consented real documents.",
+  "core": {
+    "field_accuracy": null,
+    "critical_document_accuracy": null,
+    "validation_accuracy": null,
+    "abstention_accuracy": null
+  }
+}

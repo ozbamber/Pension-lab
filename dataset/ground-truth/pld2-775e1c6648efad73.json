@@ -1,0 +1,63 @@
+{
+  "schema_version": 2,
+  "id": "pld2-775e1c6648efad73",
+  "document_type": "payslip",
+  "period": "12/2025",
+  "employee": {
+    "name": "עובד בדיקה 034",
+    "id": "000000034",
+    "employee_no": "TEST-1034"
+  },
+  "employer": {
+    "name": "חברת בדיקות פיקטיבית 7 בע״מ"
+  },
+  "employment": {
+    "start_date": "01/2022",
+    "position_percentage": null
+  },
+  "salary": {
+    "base_salary": null,
+    "gross": 31080.0,
+    "taxable_gross": null,
+    "pensionable_salary": 28000,
+    "net": 21840.0,
+    "net_to_pay": null
+  },
+  "pension": {
+    "employee": {
+      "rate": 0.06,
+      "amount": 1680.0
+    },
+    "employer": {
+      "rate": 0.075,
+      "amount": 2100.0
+    },
+    "severance": {
+      "rate": 0.06,
+      "amount": 1680.0
+    },
+    "provider": null,
+    "product": null
+  },
+  "deductions": [],
+  "payments": [],
+  "ytd": {},
+  "annotation": {
+    "annotated_fields": [
+      "period",
+      "employment.start_date",
+      "salary.gross",
+      "salary.pensionable_salary",
+      "salary.net",
+      "pension.employee.rate",
+      "pension.employee.amount",
+      "pension.employer.rate",
+      "pension.employer.amount",
+      "pension.severance.rate",
+      "pension.severance.amount"
+    ],
+    "expected_absent_fields": [],
+    "evidence": {},
+    "notes": "Imported from Pension Lab corpus v1 expected values."
+  }
+}

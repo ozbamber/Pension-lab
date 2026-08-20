@@ -8,7 +8,7 @@ The canonical repository and coherent detector were verified with synthetic adve
 
 - `npm run test:engine`: **23/23 calculation-engine tests passed**.
 - `npm run test:documents`: **10/10 document-model tests passed**.
-- `npm run test:ocr`: **28/28 OCR/parser tests passed**.
+- `npm run test:ocr`: **29/29 OCR/parser tests passed**.
 - `npm run test:pension`: **17/17 pension-report/reconciliation tests passed**.
 - `npm run test:browser:ocr`: **5/5 native-PDF, OCR, privacy, refresh, mobile and cancellation groups passed**.
 - `npm run test:browser:standalone`: **4/4 generated-artifact checks passed**, covering 10 vendor URLs, native PDF, scanned OCR and zero 404/console/runtime/network-load errors.
@@ -16,6 +16,10 @@ The canonical repository and coherent detector were verified with synthetic adve
 - `npm run build`: generated **219 files** in ignored `dist/` from canonical `app/`.
 - `npm run check:standalone`: **8/8 inline script blocks passed syntax validation**.
 - `node --check`: **18/18 authored JavaScript files passed syntax validation**.
+- `npm run dataset:validate`: **66/66 dataset documents and ground-truth records passed**, with 54 text-layer and 12 image-only/degraded documents.
+- `npm run test:dataset`: **6/6 Dataset v2 contract tests passed**.
+- Dataset v2 text benchmark: **79.2% field, 55.6% critical-document, 100.0% validation** across 54 text-layer documents.
+- Dataset v2 full browser benchmark: **60.6% field, 33.3% critical-document, 100.0% validation** across all 66 documents.
 - Ignored local private acceptance passed for the normalized salary, three contribution rates, balance, both fees, and report-supplied employee provenance.
 - Viewports tested at 1440×1000, 822×950, 390×844 and 320×800.
 - The landing screen presents two optional document cards plus a manual path; forecast and advanced controls stay hidden.

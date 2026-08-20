@@ -207,6 +207,18 @@ test('unlabelled multiple dates remain below chronology confidence', () => {
   assert.ok(!parsed.fields.payslipMonth || parsed.fields.payslipMonth.confidence < 0.8);
 });
 
+test('month/year fragments are not reused as financial amounts', () => {
+  const parsed = P.parsePayslip([
+    'pay period 04/2025',
+    'gross salary 20,812.50',
+    'insured salary 18,750',
+    'employee contribution 1,125 6%',
+  ].join('\\n'), { method: 'pdf-text' });
+  assert.strictEqual(parsed.fields.payslipMonth.value, '04/2025');
+  assert.strictEqual(parsed.fields.grossSalary.value, 20812.5);
+  assert.strictEqual(parsed.fields.insuredSalary.value, 18750);
+});
+
 test('global tuple pairs all contribution roles without reusing numeric observations', () => {
   const parsed = P.parsePayslip([
     'שכר לפנסיה 20,000',

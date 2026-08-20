@@ -1,0 +1,41 @@
+{
+  "documents": 66,
+  "by_type": {
+    "payslip": 36,
+    "pension_report": 30
+  },
+  "by_source_type": {
+    "synthetic": 54,
+    "augmented": 12
+  },
+  "by_quality": {
+    "high": 54,
+    "degraded": 12
+  },
+  "by_split": {
+    "validation": 19,
+    "development": 33,
+    "unseen-template-test": 14
+  },
+  "families": {
+    "hilan_two_column": 6,
+    "grid_dense": 6,
+    "legacy_mono": 5,
+    "minimal_modern": 5,
+    "split_value_rows": 4,
+    "bilingual": 4,
+    "landscape_table": 3,
+    "annual_distractor": 5,
+    "annual_detailed": 5,
+    "provider_modern": 4,
+    "history_dense": 5,
+    "old_pension": 4,
+    "quarterly": 4,
+    "fee_heavy": 4,
+    "reversed_columns": 2
+  },
+  "text_layer": {
+    "yes": 54,
+    "no": 12
+  }
+}

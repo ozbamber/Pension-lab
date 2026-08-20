@@ -1,0 +1,336 @@
+{
+  "files": [
+    {
+      "file": "public_layout_replicas/payslips/public-derived-payslip-01-hilan_two_column.pdf",
+      "pages": 1,
+      "text_chars": 485
+    },
+    {
+      "file": "public_layout_replicas/payslips/public-derived-payslip-02-grid_dense.pdf",
+      "pages": 1,
+      "text_chars": 378
+    },
+    {
+      "file": "public_layout_replicas/payslips/public-derived-payslip-03-legacy_mono.pdf",
+      "pages": 1,
+      "text_chars": 335
+    },
+    {
+      "file": "public_layout_replicas/payslips/public-derived-payslip-04-minimal_modern.pdf",
+      "pages": 1,
+      "text_chars": 285
+    },
+    {
+      "file": "public_layout_replicas/pension_reports/public-derived-pension-01-annual_detailed.pdf",
+      "pages": 2,
+      "text_chars": 729
+    },
+    {
+      "file": "public_layout_replicas/pension_reports/public-derived-pension-02-provider_modern.pdf",
+      "pages": 1,
+      "text_chars": 510
+    },
+    {
+      "file": "public_layout_replicas/pension_reports/public-derived-pension-03-history_dense.pdf",
+      "pages": 1,
+      "text_chars": 464
+    },
+    {
+      "file": "public_layout_replicas/pension_reports/public-derived-pension-04-old_pension.pdf",
+      "pages": 1,
+      "text_chars": 508
+    },
+    {
+      "file": "synthetic/payslips/payslip-01-hilan_two_column.pdf",
+      "pages": 1,
+      "text_chars": 479
+    },
+    {
+      "file": "synthetic/payslips/payslip-02-grid_dense.pdf",
+      "pages": 1,
+      "text_chars": 381
+    },
+    {
+      "file": "synthetic/payslips/payslip-03-minimal_modern.pdf",
+      "pages": 1,
+      "text_chars": 276
+    },
+    {
+      "file": "synthetic/payslips/payslip-04-legacy_mono.pdf",
+      "pages": 1,
+      "text_chars": 335
+    },
+    {
+      "file": "synthetic/payslips/payslip-05-split_value_rows.pdf",
+      "pages": 1,
+      "text_chars": 270
+    },
+    {
+      "file": "synthetic/payslips/payslip-06-bilingual.pdf",
+      "pages": 1,
+      "text_chars": 430
+    },
+    {
+      "file": "synthetic/payslips/payslip-07-landscape_table.pdf",
+      "pages": 1,
+      "text_chars": 301
+    },
+    {
+      "file": "synthetic/payslips/payslip-08-annual_distractor.pdf",
+      "pages": 1,
+      "text_chars": 322
+    },
+    {
+      "file": "synthetic/payslips/payslip-09-hilan_two_column.pdf",
+      "pages": 1,
+      "text_chars": 488
+    },
+    {
+      "file": "synthetic/payslips/payslip-10-grid_dense.pdf",
+      "pages": 1,
+      "text_chars": 381
+    },
+    {
+      "file": "synthetic/payslips/payslip-11-minimal_modern.pdf",
+      "pages": 1,
+      "text_chars": 283
+    },
+    {
+      "file": "synthetic/payslips/payslip-12-legacy_mono.pdf",
+      "pages": 1,
+      "text_chars": 344
+    },
+    {
+      "file": "synthetic/payslips/payslip-13-split_value_rows.pdf",
+      "pages": 1,
+      "text_chars": 265
+    },
+    {
+      "file": "synthetic/payslips/payslip-14-bilingual.pdf",
+      "pages": 1,
+      "text_chars": 430
+    },
+    {
+      "file": "synthetic/payslips/payslip-15-landscape_table.pdf",
+      "pages": 1,
+      "text_chars": 295
+    },
+    {
+      "file": "synthetic/payslips/payslip-16-annual_distractor.pdf",
+      "pages": 1,
+      "text_chars": 318
+    },
+    {
+      "file": "synthetic/payslips/payslip-17-hilan_two_column.pdf",
+      "pages": 1,
+      "text_chars": 494
+    },
+    {
+      "file": "synthetic/payslips/payslip-18-grid_dense.pdf",
+      "pages": 1,
+      "text_chars": 383
+    },
+    {
+      "file": "synthetic/payslips/payslip-19-minimal_modern.pdf",
+      "pages": 1,
+      "text_chars": 285
+    },
+    {
+      "file": "synthetic/payslips/payslip-20-legacy_mono.pdf",
+      "pages": 1,
+      "text_chars": 338
+    },
+    {
+      "file": "synthetic/payslips/payslip-21-split_value_rows.pdf",
+      "pages": 1,
+      "text_chars": 268
+    },
+    {
+      "file": "synthetic/payslips/payslip-22-bilingual.pdf",
+      "pages": 1,
+      "text_chars": 430
+    },
+    {
+      "file": "synthetic/payslips/payslip-23-landscape_table.pdf",
+      "pages": 1,
+      "text_chars": 298
+    },
+    {
+      "file": "synthetic/payslips/payslip-24-annual_distractor.pdf",
+      "pages": 1,
+      "text_chars": 331
+    },
+    {
+      "file": "synthetic/payslips/payslip-25-hilan_two_column.pdf",
+      "pages": 1,
+      "text_chars": 479
+    },
+    {
+      "file": "synthetic/payslips/payslip-26-grid_dense.pdf",
+      "pages": 1,
+      "text_chars": 381
+    },
+    {
+      "file": "synthetic/pension_reports/pension-report-01-annual_detailed.pdf",
+      "pages": 2,
+      "text_chars": 743
+    },
+    {
+      "file": "synthetic/pension_reports/pension-report-02-quarterly.pdf",
+      "pages": 1,
+      "text_chars": 410
+    },
+    {
+      "file": "synthetic/pension_reports/pension-report-03-fee_heavy.pdf",
+      "pages": 1,
+      "text_chars": 517
+    },
+    {
+      "file": "synthetic/pension_reports/pension-report-04-history_dense.pdf",
+      "pages": 1,
+      "text_chars": 464
+    },
+    {
+      "file": "synthetic/pension_reports/pension-report-05-provider_modern.pdf",
+      "pages": 1,
+      "text_chars": 498
+    },
+    {
+      "file": "synthetic/pension_reports/pension-report-06-old_pension.pdf",
+      "pages": 1,
+      "text_chars": 488
+    },
+    {
+      "file": "synthetic/pension_reports/pension-report-07-reversed_columns.pdf",
+      "pages": 1,
+      "text_chars": 445
+    },
+    {
+      "file": "synthetic/pension_reports/pension-report-08-annual_distractor.pdf",
+      "pages": 1,
+      "text_chars": 551
+    },
+    {
+      "file": "synthetic/pension_reports/pension-report-09-annual_detailed.pdf",
+      "pages": 2,
+      "text_chars": 749
+    },
+    {
+      "file": "synthetic/pension_reports/pension-report-10-quarterly.pdf",
+      "pages": 1,
+      "text_chars": 410
+    },
+    {
+      "file": "synthetic/pension_reports/pension-report-11-fee_heavy.pdf",
+      "pages": 1,
+      "text_chars": 478
+    },
+    {
+      "file": "synthetic/pension_reports/pension-report-12-history_dense.pdf",
+      "pages": 1,
+      "text_chars": 479
+    },
+    {
+      "file": "synthetic/pension_reports/pension-report-13-provider_modern.pdf",
+      "pages": 1,
+      "text_chars": 513
+    },
+    {
+      "file": "synthetic/pension_reports/pension-report-14-old_pension.pdf",
+      "pages": 1,
+      "text_chars": 470
+    },
+    {
+      "file": "synthetic/pension_reports/pension-report-15-reversed_columns.pdf",
+      "pages": 1,
+      "text_chars": 459
+    },
+    {
+      "file": "synthetic/pension_reports/pension-report-16-annual_distractor.pdf",
+      "pages": 1,
+      "text_chars": 551
+    },
+    {
+      "file": "synthetic/pension_reports/pension-report-17-annual_detailed.pdf",
+      "pages": 2,
+      "text_chars": 749
+    },
+    {
+      "file": "synthetic/pension_reports/pension-report-18-quarterly.pdf",
+      "pages": 1,
+      "text_chars": 431
+    },
+    {
+      "file": "synthetic/pension_reports/pension-report-19-fee_heavy.pdf",
+      "pages": 1,
+      "text_chars": 490
+    },
+    {
+      "file": "synthetic/pension_reports/pension-report-20-history_dense.pdf",
+      "pages": 1,
+      "text_chars": 464
+    },
+    {
+      "file": "לאחר מכן/payslips/degraded-01-payslip-01-hilan_two_column.pdf",
+      "pages": 1,
+      "text_chars": 0
+    },
+    {
+      "file": "לאחר מכן/payslips/degraded-02-payslip-02-grid_dense.pdf",
+      "pages": 1,
+      "text_chars": 0
+    },
+    {
+      "file": "לאחר מכן/payslips/degraded-03-payslip-03-minimal_modern.pdf",
+      "pages": 1,
+      "text_chars": 0
+    },
+    {
+      "file": "לאחר מכן/payslips/degraded-04-payslip-04-legacy_mono.pdf",
+      "pages": 1,
+      "text_chars": 0
+    },
+    {
+      "file": "לאחר מכן/payslips/degraded-05-payslip-05-split_value_rows.pdf",
+      "pages": 1,
+      "text_chars": 0
+    },
+    {
+      "file": "לאחר מכן/payslips/degraded-06-payslip-06-bilingual.pdf",
+      "pages": 1,
+      "text_chars": 0
+    },
+    {
+      "file": "לאחר מכן/pension_reports/degraded-07-pension-report-01-annual_detailed.pdf",
+      "pages": 2,
+      "text_chars": 0
+    },
+    {
+      "file": "לאחר מכן/pension_reports/degraded-08-pension-report-02-quarterly.pdf",
+      "pages": 1,
+      "text_chars": 0
+    },
+    {
+      "file": "לאחר מכן/pension_reports/degraded-09-pension-report-03-fee_heavy.pdf",
+      "pages": 1,
+      "text_chars": 0
+    },
+    {
+      "file": "לאחר מכן/pension_reports/degraded-10-pension-report-04-history_dense.pdf",
+      "pages": 1,
+      "text_chars": 0
+    },
+    {
+      "file": "לאחר מכן/pension_reports/degraded-11-pension-report-05-provider_modern.pdf",
+      "pages": 1,
+      "text_chars": 0
+    },
+    {
+      "file": "לאחר מכן/pension_reports/degraded-12-pension-report-06-old_pension.pdf",
+      "pages": 1,
+      "text_chars": 0
+    }
+  ],
+  "errors": [],
+  "duplicate_hash_groups": []
+}

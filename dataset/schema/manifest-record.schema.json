@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pension-lab.local/schema/manifest-record.schema.json",
+  "title": "Pension Lab Dataset v2 manifest record",
+  "type": "object",
+  "required": ["id", "document_type", "path", "sha256", "source_type", "family", "split", "has_text_layer", "license_or_consent"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^pld2-[a-f0-9]{16}$" },
+    "document_type": { "enum": ["payslip", "pension_report"] },
+    "path": { "type": "string" },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "source_type": { "enum": ["official", "public_example", "consented_real", "synthetic", "augmented"] },
+    "family": { "type": "string", "minLength": 1 },
+    "template_family": { "type": "string" },
+    "split": { "enum": ["development", "validation", "unseen-template-test", "golden-real-test"] },
+    "quality": { "enum": ["high", "degraded"] },
+    "digital_or_scan": { "enum": ["digital", "scan"] },
+    "has_text_layer": { "type": "boolean" },
+    "pages": { "type": ["integer", "null"], "minimum": 1 },
+    "source_url": { "type": ["string", "null"] },
+    "license_or_consent": { "type": "string", "minLength": 1 },
+    "parent_document": { "type": ["string", "null"] },
+    "distribution_authorized": { "type": "boolean" }
+  },
+  "additionalProperties": true
+}

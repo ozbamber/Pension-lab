@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pension-lab.local/schema/ground-truth.schema.json",
+  "title": "Pension Lab Dataset v2 ground truth",
+  "type": "object",
+  "required": ["schema_version", "id", "document_type", "annotation"],
+  "properties": {
+    "schema_version": { "const": 2 },
+    "id": { "type": "string" },
+    "document_type": { "enum": ["payslip", "pension_report"] },
+    "annotation": {
+      "type": "object",
+      "required": ["annotated_fields", "expected_absent_fields"],
+      "properties": {
+        "annotated_fields": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "expected_absent_fields": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "evidence": { "type": "object" },
+        "notes": { "type": "string" }
+      }
+    }
+  },
+  "additionalProperties": true
+}

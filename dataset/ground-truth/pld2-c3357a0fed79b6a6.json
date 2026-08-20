@@ -1,0 +1,76 @@
+{
+  "schema_version": 2,
+  "id": "pld2-c3357a0fed79b6a6",
+  "document_type": "pension_report",
+  "member": {
+    "name": "עמית בדיקה 034"
+  },
+  "provider": {
+    "name": "קרן פנסיה פיקטיבית 5",
+    "product": null
+  },
+  "report": {
+    "year": 2025,
+    "quarter": null,
+    "latest_period": "11/2025"
+  },
+  "fees": {
+    "personal": {
+      "deposit_rate": 0.01,
+      "balance_rate": 0.0016
+    },
+    "fund_average": {
+      "deposit_rate": 0.0165,
+      "balance_rate": 0.0013
+    }
+  },
+  "balances": {
+    "opening": null,
+    "closing": 428574
+  },
+  "latest_contribution": {
+    "salary": 18750,
+    "employee": {
+      "rate": 0.055,
+      "amount": 1031.25
+    },
+    "employer": {
+      "rate": 0.075,
+      "amount": 1406.25
+    },
+    "severance": {
+      "rate": 0.0833,
+      "amount": 1561.88
+    }
+  },
+  "contribution_history": [],
+  "investment_track": null,
+  "projected_pension": null,
+  "coverage": {
+    "disability": null,
+    "survivor": null
+  },
+  "gaps": [],
+  "annotation": {
+    "annotated_fields": [
+      "provider.name",
+      "report.year",
+      "report.latest_period",
+      "fees.personal.deposit_rate",
+      "fees.personal.balance_rate",
+      "fees.fund_average.deposit_rate",
+      "fees.fund_average.balance_rate",
+      "balances.closing",
+      "latest_contribution.salary",
+      "latest_contribution.employee.rate",
+      "latest_contribution.employee.amount",
+      "latest_contribution.employer.rate",
+      "latest_contribution.employer.amount",
+      "latest_contribution.severance.rate",
+      "latest_contribution.severance.amount"
+    ],
+    "expected_absent_fields": [],
+    "evidence": {},
+    "notes": "Imported from Pension Lab corpus v1 expected values. Full contribution history is not yet annotated."
+  }
+}

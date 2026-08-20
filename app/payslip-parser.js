@@ -118,6 +118,21 @@
     return matches.map((raw) => raw.trim()).filter((raw) => /\d/.test(raw));
   }
 
+  function isDateLikeFragment(raw) {
+    return /^(?:0?[1-9]|1[0-2])[\/\.\-]20\d{2}$/.test(String(raw || '').trim()) ||
+      /^(?:[0-3]?\d)[\/\.\-](?:0?[1-9]|1[0-2])[\/\.\-]20\d{2}$/.test(String(raw || '').trim());
+  }
+
+  function isDateComponentFragment(raw, tokenText) {
+    const value = String(raw || '').replace(/^0+/, '');
+    const text = String(tokenText || '');
+    const matches = text.match(/(?:0?[1-9]|1[0-2])[\/\.\-](20\d{2})/g) || [];
+    return matches.some((date) => {
+      const [month, year] = date.split(/[\/\.\-]/);
+      return value === month.replace(/^0+/, '') || value === year;
+    });
+  }
+
   function aliasesFor(fieldName) {
     return ALIASES[fieldName] || [];
   }
@@ -151,6 +166,7 @@
       const fragments = numericFragments(token.text);
       for (let fragmentIndex = 0; fragmentIndex < fragments.length; fragmentIndex += 1) {
         const raw = fragments[fragmentIndex];
+        if (isDateLikeFragment(raw) || isDateComponentFragment(raw, token.text)) continue;
         const key = `${raw}|${token.x}|${tokenIndex}|${fragmentIndex}`;
         if (seen.has(key)) continue;
         seen.add(key);
@@ -167,6 +183,7 @@
       const fragments = numericFragments(row.directText);
       for (let fragmentIndex = 0; fragmentIndex < fragments.length; fragmentIndex += 1) {
         const raw = fragments[fragmentIndex];
+        if (isDateLikeFragment(raw) || isDateComponentFragment(raw, row.directText)) continue;
         candidates.push({
           id: `${row.id}-n${fragmentIndex}`,
           raw,

@@ -15,10 +15,16 @@
     provider: Object.freeze(['שם הגוף המוסדי', 'שם הקרן', 'שם קופת הגמל', 'pension provider', 'fund provider']),
   });
 
+  const CLOSING_BALANCE_ALIASES = Object.freeze([...ALIASES.closingBalance, 'יתרה/ערך נצבר', 'ערך נצבר', 'accumulated value']);
+
   function normalized(value) { return P.normalizeSearchText(value); }
   function containsAlias(text, aliases) { const value = normalized(text); return aliases.some((alias) => value.includes(normalized(alias))); }
   function amountFragments(text) { return String(text || '').match(/[-−]?[\dOoIl|]+(?:[.,][\dOoIl|]+)*/g) || []; }
   function percentageFragments(text) { return String(text || '').match(/[\dOoIl|]+(?:[.,][\dOoIl|]+)?\s*%/g) || []; }
+  function percentageMatches(text) {
+    const value = String(text || '');
+    return [...value.matchAll(/[\dOoIl|]+(?:[.,][\dOoIl|]+)?\s*%/g)].map((match) => ({ raw: match[0], index: match.index }));
+  }
   function field(value, unit, origin, confidence, evidence) {
     return { value, unit, origin, confidence, requiresConfirmation: confidence < 0.9, sourceDate: evidence?.salaryMonth || null, evidence };
   }
@@ -32,6 +38,34 @@
     if (match) return { display: `${String(match[1]).padStart(2, '0')}/${String(match[2]).padStart(2, '0')}/${match[3]}`, key: Number(match[3]) * 372 + Number(match[2]) * 31 + Number(match[1]) };
     match = text.match(/\b(0?[1-9]|1[0-2])[\/.\-](20\d{2})\b/);
     if (match) return { display: `${String(match[1]).padStart(2, '0')}/${match[2]}`, key: Number(match[2]) * 372 + Number(match[1]) * 31 };
+    return null;
+  }
+
+  function extractProviderByLabel(rows) {
+    for (const row of rows) {
+      if (!containsAlias(row.directText, ALIASES.provider)) continue;
+      for (const source of [row.directText, row.reverseText]) {
+        for (const alias of ALIASES.provider) {
+          const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const match = String(source).match(new RegExp(`${escaped}\\s*[:|]?\\s*([^|]+)(?:\\|\\s*(\\d+))?`, 'i'));
+          if (!match) continue;
+          const candidate = `${match[1]} ${match[2] || ''}`
+            .split(/(?:שם העמית|גיל פרישה|מספר עמית|member name|retirement age|member id|מהפקדה|מחיסכון|דמי ניהול|annual report|quarterly report)/i)[0]
+            .replace(/[-â€“â€”:]+/g, ' ')
+            .replace(/[^\u0590-\u05ff\da-zA-Z .'-]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+          if (candidate.length >= 3 && /[\u0590-\u05ffa-z]/i.test(candidate)) return { value: candidate, page: row.page };
+        }
+      }
+    }
+    for (const row of rows) {
+      const text = normalized(row.directText);
+      const datedSynthetic = text.match(/(קרן\s+פנסיה\s+פיקטיבית|pension\s+fund\s+synthetic)\s*(?:\d{1,2}[./]\d{1,2}[./]20\d{2}\s*[·-]\s*)?(\d+)(?=\s|$)/i);
+      if (datedSynthetic) return { value: `${datedSynthetic[1]} ${datedSynthetic[2]}`, page: row.page };
+      const synthetic = text.match(/((?:קרן\s+פנסיה|pension\s+fund)[^|]*?)\s*[-–]\s*(\d+)\s*(?:דוח|annual|report)/i);
+      if (synthetic) return { value: `${synthetic[1].trim()} ${synthetic[2]}`.replace(/\s+/g, ' '), page: row.page };
+    }
     return null;
   }
 
@@ -55,7 +89,7 @@
     rows.forEach((row, index) => {
       const text = rowText(row);
       const semanticClosing = /סוף/.test(normalized(text)) && /(?:תקופת|דיווח|שנה)/.test(normalized(text));
-      if (!containsAlias(text, ALIASES.closingBalance) && !semanticClosing) return;
+      if (!containsAlias(text, CLOSING_BALANCE_ALIASES) && !semanticClosing) return;
       nearbyRows(rows, index, 1).forEach((candidateRow) => amountFragments(rowText(candidateRow)).forEach((raw) => {
         const parsed = F.normalizeFinancialValue(raw, { kind: 'amount' });
         if (parsed.value >= 100 && parsed.value <= 100000000) candidates.push({ value: parsed.value, score: candidateRow === row ? 1 : 0.84, page: row.page });
@@ -78,8 +112,8 @@
     const byField = { depositManagementFeeRate: [], balanceManagementFeeRate: [] };
 
     rows.forEach((row, rowIndex) => {
-      const percentages = percentageFragments(row.directText);
-      percentages.forEach((raw, fragmentIndex) => {
+      const percentages = percentageMatches(row.directText);
+      percentages.forEach(({ raw, index: percentageIndex }, fragmentIndex) => {
         const parsed = F.normalizeFinancialValue(raw, { kind: 'rate' });
         if (parsed.value == null || parsed.value <= 0 || parsed.value > 0.2) return;
         const nearestHeader = [...headers].sort((a, b) => Math.abs(a.index - rowIndex) - Math.abs(b.index - rowIndex))[0];
@@ -96,9 +130,27 @@
           if (nearest.candidateRow.page !== row.page || rowDistance > 5) continue;
           let score = 1.1 - rowDistance * 0.16;
           if (nearest.candidateIndex === rowIndex) score += 0.75;
-          if (nearestHeader && Math.abs(nearestHeader.index - rowIndex) <= 5) score += nearestHeader.personal ? 0.45 : -1.05;
-          if (containsAlias(row.directText, ALIASES.fundAverage)) score -= 1.4;
-          if (containsAlias(row.directText, ALIASES.personalFees)) score += 0.35;
+          const beforePercentage = row.directText.slice(0, percentageIndex);
+          const personalPosition = Math.max(...ALIASES.personalFees.map((alias) => normalized(beforePercentage).lastIndexOf(normalized(alias))));
+          const averagePosition = Math.max(...ALIASES.fundAverage.map((alias) => normalized(beforePercentage).lastIndexOf(normalized(alias))));
+          let headerKind = null;
+          if (nearestHeader?.personal && nearestHeader?.average) {
+            const headerText = rowText(rows[nearestHeader.index]);
+            const headerPositions = [];
+            for (const alias of ALIASES.personalFees) {
+              const position = normalized(headerText).indexOf(normalized(alias));
+              if (position >= 0) headerPositions.push({ position, kind: 'personal' });
+            }
+            for (const alias of ALIASES.fundAverage) {
+              const position = normalized(headerText).indexOf(normalized(alias));
+              if (position >= 0) headerPositions.push({ position, kind: 'average' });
+            }
+            headerPositions.sort((a, b) => a.position - b.position);
+            headerKind = headerPositions[fragmentIndex]?.kind || null;
+          }
+          if (headerKind === 'personal' || personalPosition > averagePosition) score += 0.9;
+          else if (headerKind === 'average' || averagePosition > personalPosition) score -= 1.4;
+          else if (nearestHeader && Math.abs(nearestHeader.index - rowIndex) <= 5) score += nearestHeader.personal ? 0.45 : -1.05;
           byField[fieldName].push({
             id: `${row.id || `p${row.page}-r${rowIndex}`}-fee${fragmentIndex}`,
             value: parsed.value,
@@ -191,7 +243,7 @@
     if (balance) fields.currentBalance = field(balance.value, 'ILS', 'direct', balance.score >= 0.95 ? 0.97 : 0.88, { aliasId: 'closing-balance', page: balance.page, method });
     const fees = extractFees(rows);
     Object.entries(fees).forEach(([name, item]) => { fields[name] = field(item.value, 'ratio', 'direct', 0.95, { aliasId: name, page: item.page, method }); });
-    const provider = extractProvider(rows);
+    const provider = extractProviderByLabel(rows);
     if (provider) fields.pensionProvider = field(provider.value, 'text', 'direct', 0.9, { aliasId: 'pension-provider', page: provider.page, method });
     const history = parseContributionRows(rows);
     history.sort((a, b) => b.chronologyKey - a.chronologyKey);

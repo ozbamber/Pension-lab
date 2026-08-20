@@ -1,0 +1,4 @@
+evaluation/*.json
+private/
+documents/consented-real/
+golden-real/

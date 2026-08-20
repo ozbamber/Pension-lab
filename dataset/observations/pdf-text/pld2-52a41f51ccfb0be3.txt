@@ -1,0 +1,23 @@
+                                                                            Payslip / ‫תלוש שכר‬
+‫ בע״מ‬4 ‫חברת בדיקות פיקטיבית‬                                                      09/2026 :‫ תקופת שכר‬/ Pay period
+
+
+                      ‫ ערך‬/ Value                             ‫ שדה‬/ Field
+
+ 19,800                                                                               ‫ שכר מבוטח‬/ Insured salary
+
+ 22,572                                                                                  ‫ שכר ברוטו‬/ Gross salary
+
+ 1,287 6.50%                                                                 ‫ תגמולי עובד‬/ Employee contribution
+
+ 1,386 7%                                                                   ‫ תגמולי מעסיק‬/ Employer contribution
+
+ 1,649.34 8.33%                                                                              ‫ פיצויים‬/ Severance
+
+Employment start date: 10/2019 | Annual/YTD salary: 237,600
+
+
+
+
+    SYNTHETIC TEST FIXTURE
+

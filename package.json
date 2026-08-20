@@ -13,6 +13,11 @@
     "test:browser:ocr": "node tests/browser/ocr-browser.test.js",
     "test:browser:standalone": "npm run build && node tests/browser/standalone-document.test.js",
     "test:browser:smoke": "node tests/browser/browser-smoke.js",
+    "test:dataset": "node tests/dataset/dataset.test.js",
+    "dataset:validate": "node scripts/dataset/validate-dataset.js",
+    "dataset:evaluate": "node scripts/dataset/evaluate-predictions.js",
+    "dataset:benchmark:text": "node scripts/dataset/evaluate-parser-text.js",
+    "dataset:benchmark:browser": "node tests/dataset/browser-benchmark.test.js",
     "test:core": "npm run test:engine && npm run test:documents && npm run test:ocr && npm run test:pension"
   }
 }
