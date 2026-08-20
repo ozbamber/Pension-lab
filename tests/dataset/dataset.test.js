@@ -12,6 +12,7 @@ const {
   getPath,
   evaluatePredictions,
   arithmeticChecks,
+  validationChecksPossible,
   CORE_FIELDS,
 } = require('../../scripts/dataset/lib/dataset-core');
 
@@ -108,6 +109,22 @@ test('validation distinguishes missing, null, partial, correct and inconsistent 
   assert.strictEqual(correct[0].pass, true);
   assert.strictEqual(inconsistent.length, 1);
   assert.strictEqual(inconsistent[0].pass, false);
+});
+
+test('possible validation checks follow annotated fields and expected absences', () => {
+  const dataset = loadDataset(projectRoot);
+  const record = dataset.records.find((item) => item.document_type === 'payslip');
+  const groundTruth = dataset.groundTruth.get(record.id);
+  const absentRole = {
+    ...groundTruth,
+    annotation: {
+      ...groundTruth.annotation,
+      annotated_fields: groundTruth.annotation.annotated_fields.filter((field) => !field.startsWith('pension.employer.')),
+      expected_absent_fields: ['pension.employer.rate', 'pension.employer.amount'],
+    },
+  };
+  assert.strictEqual(validationChecksPossible(groundTruth, 'payslip'), 3);
+  assert.strictEqual(validationChecksPossible(absentRole, 'payslip'), 2);
 });
 
 test('manifest and ground-truth schema contracts fail closed', () => {

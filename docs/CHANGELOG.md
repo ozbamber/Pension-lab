@@ -116,3 +116,7 @@
 - Removed fixture-specific provider-name fallbacks from the production pension parser.
 - Added generic same-row, nearby-row and structured-token provider extraction plus full-date numeric filtering.
 - Added fail-closed manifest/ground-truth contract validation and separate arithmetic validation coverage metrics.
+## Nearby provider safety and annotation-based validation coverage — 2026-08-20
+
+- Reject nearby provider candidates that are financial rows, report headings, investment tracks, dates or percentage rows, while retaining same-row, nearby-row and structured-token extraction.
+- Derive possible arithmetic checks from annotated salary/rate/amount triplets and exclude expected-absent or non-finite values.

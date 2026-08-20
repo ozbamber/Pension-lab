@@ -93,6 +93,23 @@ test('provider extraction accepts a same-row label and stops before unrelated te
   assert.strictEqual(parsed.fields.pensionProvider.value, 'מנורה מבטחים פנסיה וגמל בע"מ');
 });
 
+test('provider extraction rejects an unrelated investment heading after a missing value', () => {
+  const parsed = R.parsePensionReport(['שם הגוף המוסדי', 'מסלול השקעה כללי'].join('\n'));
+  assert.strictEqual(parsed.fields.pensionProvider, undefined);
+});
+
+test('provider extraction rejects a following financial balance row after a missing value', () => {
+  const parsed = R.parsePensionReport(['שם הגוף המוסדי', 'יתרת הכספים בקרן בסוף השנה 237,963'].join('\n'));
+  assert.strictEqual(parsed.fields.pensionProvider, undefined);
+});
+
+test('provider extraction accepts English same-row and following-row labels', () => {
+  const sameRow = R.parsePensionReport('institution name: Menora Mivtachim Pension and Gemel Ltd. | member name: Test Member');
+  const followingRow = R.parsePensionReport(['institution name', 'Menora Mivtachim Pension and Gemel Ltd.', 'member name Test Member'].join('\n'));
+  assert.strictEqual(sameRow.fields.pensionProvider.value, 'Menora Mivtachim Pension and Gemel Ltd.');
+  assert.strictEqual(followingRow.fields.pensionProvider.value, 'Menora Mivtachim Pension and Gemel Ltd.');
+});
+
 test('provider extraction uses structured token geometry without absorbing neighboring labels', () => {
   const parsed = R.parsePensionReport({ pages: [{ pageNumber: 1, tokens: [
     { text: 'שם הגוף המוסדי', x: 600, y: 20, width: 120, height: 14 },
@@ -101,6 +118,15 @@ test('provider extraction uses structured token geometry without absorbing neigh
     { text: 'עמית בדיקה', x: 450, y: 50, width: 100, height: 14 },
   ] }] });
   assert.strictEqual(parsed.fields.pensionProvider.value, 'מנורה מבטחים פנסיה וגמל בע"מ');
+});
+
+test('structured nearby financial rows cannot become a provider', () => {
+  const parsed = R.parsePensionReport({ pages: [{ pageNumber: 1, tokens: [
+    { text: 'שם הגוף המוסדי', x: 600, y: 20, width: 120, height: 14 },
+    { text: 'יתרת הכספים בקרן בסוף השנה', x: 600, y: 42, width: 180, height: 14 },
+    { text: '237,963', x: 400, y: 42, width: 60, height: 14 },
+  ] }] });
+  assert.strictEqual(parsed.fields.pensionProvider, undefined);
 });
 
 test('report chronology and recurring rows select latest contribution structure', () => {

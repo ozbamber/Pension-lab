@@ -12,7 +12,7 @@
     fundAverage: Object.freeze(['ממוצע דמי ניהול בקרן', 'דמי ניהול ממוצעים', 'fund average', 'average management fees']),
     depositFee: Object.freeze(['דמי ניהול מהפקדה', 'מהפקדה', 'deposit fee']),
     balanceFee: Object.freeze(['דמי ניהול מחיסכון', 'דמי ניהול מצבירה', 'מחיסכון', 'מצבירה', 'balance fee']),
-    provider: Object.freeze(['שם הגוף המוסדי', 'שם הקרן', 'שם קופת הגמל', 'pension provider', 'fund provider']),
+    provider: Object.freeze(['שם הגוף המוסדי', 'שם הקרן', 'שם קופת הגמל', 'pension provider', 'fund provider', 'institution name', 'provider name']),
   });
 
   const CLOSING_BALANCE_ALIASES = Object.freeze([...ALIASES.closingBalance, 'יתרה/ערך נצבר', 'ערך נצבר', 'accumulated value']);
@@ -51,6 +51,19 @@
     'דמי ניהול', 'מהפקדה', 'מחיסכון', 'מצבירה', 'annual report', 'quarterly report',
     'report period', 'תקופת הדיווח', 'תאריך הדוח', 'date of report',
   ]);
+  const PROVIDER_REJECT_ALIASES = Object.freeze([
+    ...ALIASES.closingBalance, ...ALIASES.openingBalance, ...ALIASES.personalFees,
+    ...ALIASES.fundAverage, ...ALIASES.depositFee, ...ALIASES.balanceFee,
+    ...PROVIDER_STOP_ALIASES, 'מסלול השקעה', 'investment track', 'מסלול', 'track',
+    'הפקדות', 'contributions', 'שכר', 'salary', 'תאריך', 'date', 'תקופה', 'period',
+    'טבלה', 'table', 'דוח', 'report', 'סיכום', 'summary', 'פרטי העמית', 'member details',
+  ]);
+
+  function looksLikeProviderRejectRow(value) {
+    const text = String(value || '');
+    if (/(?:\d[\d.,]*\s*%?|\b(?:[0-3]?\d)[/.\-](?:0?[1-9]|1[0-2])[/.\-]20\d{2}\b|\b(?:0?[1-9]|1[0-2])[/.\-]20\d{2}\b)/.test(text)) return true;
+    return PROVIDER_REJECT_ALIASES.some((alias) => normalized(text).includes(normalized(alias)));
+  }
 
   function cleanProviderCandidate(value) {
     let candidate = String(value || '')
@@ -69,7 +82,7 @@
     }
     candidate = candidate.replace(/^[\s:|;,\-–—]+|[\s:|;,\-–—]+$/g, '').replace(/\s+/g, ' ').trim();
     if (candidate.length < 3 || !/[\u0590-\u05ffa-z]/i.test(candidate)) return null;
-    if (containsAlias(candidate, ALIASES.provider) || containsAlias(candidate, PROVIDER_STOP_ALIASES)) return null;
+    if (containsAlias(candidate, ALIASES.provider) || containsAlias(candidate, PROVIDER_STOP_ALIASES) || looksLikeProviderRejectRow(candidate)) return null;
     return candidate;
   }
 
@@ -96,6 +109,8 @@
       if (!containsAlias(row.directText, ALIASES.provider)) continue;
       for (const nextRow of rows.slice(index + 1, index + 3)) {
         if (containsAlias(nextRow.directText, ALIASES.provider)) continue;
+        if (nextRow.page !== row.page || Math.abs(nextRow.y - row.y) > 54) continue;
+        if (looksLikeProviderRejectRow(nextRow.directText)) continue;
         const candidate = cleanProviderCandidate(nextRow.directText);
         if (candidate) return { value: candidate, page: nextRow.page };
       }

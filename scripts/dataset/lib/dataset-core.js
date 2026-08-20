@@ -348,6 +348,31 @@ function arithmeticChecks(prediction, documentType) {
   return checks;
 }
 
+const ARITHMETIC_ROLE_PATHS = Object.freeze({
+  payslip: Object.freeze({
+    salary: 'salary.pensionable_salary',
+    employee: Object.freeze({ rate: 'pension.employee.rate', amount: 'pension.employee.amount' }),
+    employer: Object.freeze({ rate: 'pension.employer.rate', amount: 'pension.employer.amount' }),
+    severance: Object.freeze({ rate: 'pension.severance.rate', amount: 'pension.severance.amount' }),
+  }),
+  pension_report: Object.freeze({
+    salary: 'latest_contribution.salary',
+    employee: Object.freeze({ rate: 'latest_contribution.employee.rate', amount: 'latest_contribution.employee.amount' }),
+    employer: Object.freeze({ rate: 'latest_contribution.employer.rate', amount: 'latest_contribution.employer.amount' }),
+    severance: Object.freeze({ rate: 'latest_contribution.severance.rate', amount: 'latest_contribution.severance.amount' }),
+  }),
+});
+
+function validationChecksPossible(groundTruth, documentType) {
+  const paths = ARITHMETIC_ROLE_PATHS[documentType];
+  if (!paths) return 0;
+  const annotated = new Set(groundTruth?.annotation?.annotated_fields || []);
+  const absent = new Set(groundTruth?.annotation?.expected_absent_fields || []);
+  const expected = (fieldPath) => annotated.has(fieldPath) && !absent.has(fieldPath) && finiteNumber(getPath(groundTruth, fieldPath)) !== null;
+  if (!expected(paths.salary)) return 0;
+  return ['employee', 'employer', 'severance'].filter((role) => expected(paths[role].rate) && expected(paths[role].amount)).length;
+}
+
 function groupKey(record, dimension) {
   if (dimension === 'document_type') return record.document_type;
   if (dimension === 'family') return record.family || 'unknown';
@@ -371,12 +396,14 @@ function evaluatePredictions(projectRoot, predictionLines, options = {}) {
   let criticalTotal = 0;
   let validationCorrect = 0;
   let validationRun = 0;
-  const validationPossible = selected.length * 3;
+  let validationPossible = 0;
   let abstentionCorrect = 0;
   let abstentionTotal = 0;
 
   for (const record of selected) {
     const gt = dataset.groundTruth.get(record.id);
+    const documentValidationPossible = validationChecksPossible(gt, record.document_type);
+    validationPossible += documentValidationPossible;
     const line = predictions.get(record.id);
     const prediction = adaptPensionLabPrediction(line, record) || {};
     const annotated = gt.annotation?.annotated_fields || [];
@@ -421,13 +448,14 @@ function evaluatePredictions(projectRoot, predictionLines, options = {}) {
       field_accuracy: results.length ? results.filter((result) => result.pass).length / results.length : null,
       critical_document_pass: criticalPass,
       arithmetic_checks: arithmetic,
+      validation_checks_possible: documentValidationPossible,
     });
   }
 
   function aggregate(records) {
     const fieldRows = records.flatMap((record) => record.fields);
     const arithmetic = records.flatMap((record) => record.arithmetic_checks);
-    const possible = records.length * 3;
+    const possible = records.reduce((sum, record) => sum + record.validation_checks_possible, 0);
     const run = arithmetic.length;
     return {
       documents: records.length,
@@ -493,6 +521,7 @@ module.exports = {
   adaptPensionLabPrediction,
   valuesMatch,
   arithmeticChecks,
+  validationChecksPossible,
   finiteNumber,
   evaluatePredictions,
 };
