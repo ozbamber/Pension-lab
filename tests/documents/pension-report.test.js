@@ -111,6 +111,47 @@ test('genuine cross-document disagreement requires confirmation', () => {
   assert.ok(result.fields.insuredSalary.conflict);
 });
 
+test('newer payslip salary wins over an older higher-confidence report observation', () => {
+  const result = X.reconcile({
+    payslipMonth: { value: '08/2026', confidence: 0.92 },
+    insuredSalary: { value: 25000, confidence: 0.91, origin: 'direct', sourceDate: '08/2026', requiresConfirmation: false, evidence: { sourceDateConfidence: 0.92 } },
+  }, {
+    latestReportedPensionableSalary: { value: 23500, confidence: 0.97, origin: 'direct', sourceDate: '05/2026', evidence: { salaryMonth: '05/2026', recurringPattern: { recurring: true } } },
+  });
+  assert.strictEqual(result.fields.insuredSalary.value, 25000);
+  assert.strictEqual(result.fields.insuredSalary.sourceDate, '08/2026');
+  assert.strictEqual(result.fields.insuredSalary.evidence.type, 'CHRONOLOGY_RESOLVED');
+  assert.strictEqual(result.fields.insuredSalary.requiresConfirmation, false);
+});
+
+test('newer report salary wins symmetrically over an older payslip observation', () => {
+  const result = X.reconcile({
+    payslipMonth: { value: '05/2026', confidence: 0.92 },
+    insuredSalary: { value: 23500, confidence: 0.96, origin: 'direct', sourceDate: '05/2026', evidence: { sourceDateConfidence: 0.92 } },
+  }, {
+    latestReportedPensionableSalary: { value: 25000, confidence: 0.9, origin: 'direct', sourceDate: '08/2026', evidence: { salaryMonth: '08/2026' } },
+  });
+  assert.strictEqual(result.fields.insuredSalary.value, 25000);
+  assert.strictEqual(result.fields.insuredSalary.sourceDate, '08/2026');
+  assert.strictEqual(result.fields.insuredSalary.evidence.type, 'CHRONOLOGY_RESOLVED');
+});
+
+test('same-month salary conflict remains reviewable when evidence is not decisive', () => {
+  const result = X.reconcile({
+    payslipMonth: { value: '08/2026', confidence: 0.92 },
+    insuredSalary: { value: 23500, confidence: 0.93, origin: 'direct', sourceDate: '08/2026', evidence: { sourceDateConfidence: 0.92 } },
+  }, {
+    latestReportedPensionableSalary: { value: 25000, confidence: 0.97, origin: 'direct', sourceDate: '08/2026', evidence: { salaryMonth: '08/2026' } },
+  });
+  assert.strictEqual(result.requiresConfirmation, true);
+  assert.strictEqual(result.fields.insuredSalary.value, 23500);
+  assert.strictEqual(result.fields.insuredSalary.conflict.primary, 23500);
+  assert.strictEqual(result.fields.insuredSalary.conflict.secondary, 25000);
+  assert.strictEqual(result.fields.insuredSalary.conflict.primaryPeriod, '08/2026');
+  assert.strictEqual(result.fields.insuredSalary.conflict.secondaryPeriod, '08/2026');
+  assert.strictEqual(result.fields.insuredSalary.evidence.type, 'CROSS_DOCUMENT_CONFLICT');
+});
+
 test('non-standard rates are derived from evidence', () => {
   const parsed = R.parsePensionReport('06/2026 20,000 1,100 1,400 1,500 4,000');
   near(parsed.fields.latestEmployeeContributionRate.value, 0.055);

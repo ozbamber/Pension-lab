@@ -42,12 +42,13 @@ Browser privacy/OCR and responsive smoke suites:
 ```bash
 npm run build
 npm run test:browser:ocr
+npm run test:browser:standalone
 npm run test:browser:smoke
 ```
 
 Node.js 22+ and Chromium/Chrome are required for browser suites. Set `CHROMIUM_PATH` if the executable is not discoverable.
 
-The suites cover the projection engine, document data model, candidate-based salary and contribution detection, OCR normalization, pension-report history and fees, cross-document reconciliation, local-only privacy behavior, cancellation, refresh persistence, and desktop/mobile overflow.
+The suites cover the projection engine, document data model, candidate-based salary and contribution detection, OCR normalization, pension-report history and fees, cross-document reconciliation, the generated standalone artifact, local-only privacy behavior, cancellation, refresh persistence, and desktop/mobile overflow.
 
 ## Detection model
 

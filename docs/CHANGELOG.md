@@ -1,5 +1,15 @@
 # יומן שינויים
 
+## Standalone and evidence-coherence hardening — 2026-08-20
+
+- Corrected generated-standalone asset resolution so PDF.js, cmap/font/wasm support, Tesseract, and tessdata load from the adjacent `dist/vendor/` tree.
+- Added a real Chromium standalone smoke covering ten vendor URLs, native-PDF extraction, scanned-PDF OCR, 404 detection, and console/runtime/network-load errors.
+- Made payslip/report chronology explicit with propagated source periods, reliability, symmetric newer-period selection, substantial-evidence fallback, and reviewable same-month ambiguity.
+- Expanded each anchor to a deterministic five-row spatial neighborhood so a misleading own-row number cannot hide a correct adjacent observation.
+- Applied monthly versus annual/YTD scoring to contribution amounts and rates as well as salary.
+- Separated structured-token and flattened-text fallback streams so generated duplicate IDs cannot bypass observation non-reuse.
+- Hardened ignore rules for obvious real/private/acceptance JPG, JPEG, and PNG artifacts while retaining explicitly named synthetic fixtures under `tests/fixtures/`.
+
 ## Canonical repository and coherent document detection — 2026-08-19
 
 - Consolidated the active source into root-level `app/`, `tests/`, `scripts/`, and `docs/`; moved historical handoff material to `legacy/`.

@@ -108,6 +108,76 @@ test('global tuple rejects a 925 neighbor and keeps the coherent salary candidat
   assert.strictEqual(parsed.fields.insuredSalary.evidence.selection, 'global-coherent-tuple');
 });
 
+test('global tuple considers a true salary on an adjacent spatial row despite a 925 on the anchor row', () => {
+  const parsed = P.parsePayslip({ pages: [{ pageNumber: 1, tokens: [
+    { text: 'insured salary', x: 600, y: 100, width: 110, height: 14, confidence: 0.99 },
+    { text: '925', x: 450, y: 100, width: 35, height: 14, confidence: 0.99 },
+    { text: '23,500', x: 450, y: 120, width: 65, height: 14, confidence: 0.96 },
+    { text: 'employee contribution', x: 600, y: 180, width: 150, height: 14, confidence: 0.98 },
+    { text: '1,645', x: 450, y: 180, width: 55, height: 14, confidence: 0.98 },
+    { text: '7%', x: 380, y: 180, width: 25, height: 14, confidence: 0.98 },
+    { text: 'employer contribution', x: 600, y: 240, width: 150, height: 14, confidence: 0.98 },
+    { text: '1,528', x: 450, y: 240, width: 55, height: 14, confidence: 0.98 },
+    { text: '6.5%', x: 370, y: 240, width: 45, height: 14, confidence: 0.98 },
+    { text: 'severance', x: 600, y: 300, width: 90, height: 14, confidence: 0.98 },
+    { text: '1,958', x: 450, y: 300, width: 55, height: 14, confidence: 0.98 },
+    { text: '8.33%', x: 370, y: 300, width: 45, height: 14, confidence: 0.98 },
+  ] }] }, { method: 'pdf-text' });
+  assert.strictEqual(parsed.fields.insuredSalary.value, 23500);
+  assert.strictEqual(parsed.fields.employeeContributionAmount.value, 1645);
+  assert.strictEqual(parsed.fields.employerContributionAmount.value, 1528);
+  assert.strictEqual(parsed.fields.severanceContributionAmount.value, 1958);
+});
+
+test('contribution rate and adjacent-row amount form one coherent spatial observation', () => {
+  const parsed = P.parsePayslip({ pages: [{ pageNumber: 1, tokens: [
+    { text: 'pensionable salary', x: 600, y: 80, width: 130, height: 14, confidence: 0.98 },
+    { text: '20,000', x: 420, y: 80, width: 65, height: 14, confidence: 0.98 },
+    { text: 'employee contribution', x: 600, y: 150, width: 150, height: 14, confidence: 0.98 },
+    { text: '5.5%', x: 420, y: 150, width: 35, height: 14, confidence: 0.98 },
+    { text: 'current month 1,100', x: 420, y: 170, width: 130, height: 14, confidence: 0.96 },
+    { text: 'employer contribution 1,400 7%', x: 420, y: 230, width: 260, height: 14, confidence: 0.98 },
+    { text: 'severance 1,500 7.5%', x: 420, y: 290, width: 220, height: 14, confidence: 0.98 },
+  ] }] }, { method: 'pdf-text' });
+  assert.strictEqual(parsed.fields.employeeContributionAmount.value, 1100);
+  approximately(parsed.fields.employeeContributionRate.value, 0.055);
+  assert.strictEqual(parsed.fields.employeeContributionAmount.evidence.validation, 'amount-rate-agree');
+});
+
+test('monthly contribution tuple outranks a nearby high-confidence YTD amount', () => {
+  const parsed = P.parsePayslip({ pages: [{ pageNumber: 1, tokens: [
+    { text: 'insured salary 20,000', x: 500, y: 80, width: 180, height: 14, confidence: 0.98 },
+    { text: 'employee contribution monthly 5.5%', x: 500, y: 150, width: 260, height: 14, confidence: 0.94 },
+    { text: 'current month 1,100', x: 500, y: 170, width: 140, height: 14, confidence: 0.88 },
+    { text: 'employee contribution YTD accumulated 5,500', x: 500, y: 190, width: 310, height: 14, confidence: 0.999 },
+    { text: 'employer contribution 1,400 7%', x: 500, y: 250, width: 250, height: 14, confidence: 0.98 },
+    { text: 'severance 1,500 7.5%', x: 500, y: 310, width: 200, height: 14, confidence: 0.98 },
+  ] }] }, { method: 'pdf-text' });
+  assert.strictEqual(parsed.fields.employeeContributionAmount.value, 1100);
+  approximately(parsed.fields.employeeContributionRate.value, 0.055);
+});
+
+test('structured tokens do not gain duplicate fallback identities from input text', () => {
+  const input = {
+    pages: [{ pageNumber: 1, tokens: [
+      { text: 'insured salary', x: 500, y: 100, width: 100, height: 14, confidence: 0.98 },
+      { text: '20,000', x: 350, y: 100, width: 60, height: 14, confidence: 0.98 },
+    ] }],
+    text: 'insured salary 20,000',
+  };
+  assert.strictEqual(P.tokensFromInput(input).length, 2);
+});
+
+test('flattened text is a separate fallback stream when structured OCR has no critical tuple', () => {
+  const parsed = P.parsePayslip({
+    pages: [{ pageNumber: 1, tokens: [{ text: '08/2026', x: 0, y: 0, width: 60, height: 14, confidence: 0.9 }] }],
+    text: 'insured salary 20,000\nemployee contribution 1,100 5.5%\n08/2026',
+  }, { method: 'ocr' });
+  assert.strictEqual(parsed.fields.insuredSalary.value, 20000);
+  assert.strictEqual(parsed.fields.employeeContributionAmount.value, 1100);
+  assert.strictEqual(parsed.fields.insuredSalary.evidence.observationStream, 'flattened-text-fallback');
+});
+
 test('monthly salary wins over an annual cumulative salary through semantics and arithmetic', () => {
   const parsed = P.parsePayslip([
     'שכר מבוטח שנתי מצטבר 282,000',

@@ -108,6 +108,7 @@
       if (!PENSION_REPORT_FIELDS.includes(name) || !item || item.value == null) return;
       fields[name] = field(item.value, item.origin === 'derived' ? SOURCES.PENSION_REPORT_DERIVED : SOURCES.PENSION_REPORT_DIRECT, item.confidence, false, {
         unit: item.unit, sourceDocument: null, requiresConfirmation: item.requiresConfirmation,
+        sourceDate: item.sourceDate || item.evidence?.salaryMonth || null,
         extractionMethod: parsed.method, evidence: item.evidence,
       });
     });
@@ -128,6 +129,7 @@
       fields[name] = field(result.value, source, result.confidence, false, {
         unit: result.unit,
         sourceDocument: null,
+        sourceDate: result.sourceDate || result.evidence?.sourceDate || null,
         requiresConfirmation: result.requiresConfirmation,
         extractionMethod: parsed.method,
         evidence: result.evidence,

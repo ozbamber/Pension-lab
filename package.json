@@ -11,6 +11,7 @@
     "test:ocr": "node tests/documents/ocr-parser.test.js",
     "test:pension": "node tests/documents/pension-report.test.js",
     "test:browser:ocr": "node tests/browser/ocr-browser.test.js",
+    "test:browser:standalone": "npm run build && node tests/browser/standalone-document.test.js",
     "test:browser:smoke": "node tests/browser/browser-smoke.js",
     "test:core": "npm run test:engine && npm run test:documents && npm run test:ocr && npm run test:pension"
   }

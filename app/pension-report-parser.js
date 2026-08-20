@@ -20,7 +20,7 @@
   function amountFragments(text) { return String(text || '').match(/[-−]?[\dOoIl|]+(?:[.,][\dOoIl|]+)*/g) || []; }
   function percentageFragments(text) { return String(text || '').match(/[\dOoIl|]+(?:[.,][\dOoIl|]+)?\s*%/g) || []; }
   function field(value, unit, origin, confidence, evidence) {
-    return { value, unit, origin, confidence, requiresConfirmation: confidence < 0.9, evidence };
+    return { value, unit, origin, confidence, requiresConfirmation: confidence < 0.9, sourceDate: evidence?.salaryMonth || null, evidence };
   }
   function rowsFromInput(input) { return P.buildRows(P.tokensFromInput(input)); }
   function rowText(row) { return `${row.directText} ${row.reverseText}`; }
@@ -199,7 +199,7 @@
     if (latest) {
       const pattern = recurringEvidence(history, latest);
       const confidence = pattern.recurring ? 0.97 : 0.88;
-      const evidence = { aliasId: 'contribution-table', page: latest.page, method, salaryMonth: latest.salaryMonth, recurringPattern: pattern };
+      const evidence = { aliasId: 'contribution-table', page: latest.page, method, salaryMonth: latest.salaryMonth, sourceDateConfidence: 0.95, recurringPattern: pattern };
       fields.latestReportedPensionableSalary = field(latest.pensionableSalary, 'ILS', 'direct', confidence, evidence);
       fields.latestEmployeeContributionAmount = field(latest.employeeContribution, 'ILS', 'direct', confidence, evidence);
       fields.latestEmployerContributionAmount = field(latest.employerContribution, 'ILS', 'direct', confidence, evidence);

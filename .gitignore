@@ -11,6 +11,20 @@ tests/fixtures/private/
 **/*.private.pdf
 **/*private*.pdf
 **/*acceptance*.pdf
+**/*real*.jpg
+**/*real*.jpeg
+**/*real*.png
+**/*private*.jpg
+**/*private*.jpeg
+**/*private*.png
+**/*acceptance*.jpg
+**/*acceptance*.jpeg
+**/*acceptance*.png
+
+# Explicitly named synthetic image fixtures may be committed only here.
+!tests/fixtures/**/*synthetic*.jpg
+!tests/fixtures/**/*synthetic*.jpeg
+!tests/fixtures/**/*synthetic*.png
 extracted-text/
 ocr-output/
 *.ocr.txt

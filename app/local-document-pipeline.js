@@ -9,7 +9,6 @@
     const current = typeof document !== 'undefined' && document.currentScript && document.currentScript.src;
     if (current) return new URL('./', current);
     const href = root.location && root.location.href ? root.location.href : 'http://localhost/';
-    if (/pension-lab-he-standalone\.html(?:$|[?#])/.test(href)) return new URL('./pension-lab-he/', href);
     return new URL('./', href);
   }
 

@@ -84,19 +84,9 @@
         flattenWords(page.blocks).map((token) => normalizeToken(token, pageNumber)).filter(Boolean).forEach((token) => tokens.push(token));
       }
     }
-    if (tokens.length && input && typeof input.text === 'string') {
-      input.text.split(/[\r\n]+/).filter((line) => normalizeSearchText(line)).forEach((text, index) => {
-        tokens.push({
-          text,
-          x: 0,
-          y: 100000 + index * 24,
-          width: Math.max(40, text.length * 7),
-          height: 16,
-          confidence: 0.78,
-          page: 1,
-        });
-      });
-    }
+    // Structured observations are authoritative. Adding the flattened text as
+    // another token stream would duplicate the same numbers under new IDs and
+    // could bypass the global tuple evaluator's non-reuse guarantee.
     if (!tokens.length && input && typeof input.text === 'string') return tokensFromInput(input.text);
     return tokens;
   }
@@ -215,25 +205,37 @@
     for (const row of rows) {
       const alias = matchAlias(row, fieldName);
       if (!alias) continue;
-      const ownCandidates = candidatesForRow(row);
       const rowIndex = rows.indexOf(row);
-      const candidateRows = ownCandidates.length ? [row] : rows.filter((candidateRow, candidateIndex) => candidateRow.page === row.page && (Math.abs(candidateRow.y - row.y) <= 72 || Math.abs(candidateIndex - rowIndex) <= 2))
+      const candidateRows = rows.map((candidateRow, candidateIndex) => ({ candidateRow, candidateIndex }))
+        .filter(({ candidateRow, candidateIndex }) => candidateRow.page === row.page &&
+          (Math.abs(candidateRow.y - row.y) <= 72 || Math.abs(candidateIndex - rowIndex) <= 2))
         .sort((left, right) => {
-          const leftIndex = rows.indexOf(left) - rowIndex;
-          const rightIndex = rows.indexOf(right) - rowIndex;
-          const leftRank = leftIndex >= 0 ? leftIndex : Math.abs(leftIndex) + 3;
-          const rightRank = rightIndex >= 0 ? rightIndex : Math.abs(rightIndex) + 3;
-          return leftRank - rightRank;
-        });
+          const vertical = Math.abs(left.candidateRow.y - row.y) - Math.abs(right.candidateRow.y - row.y);
+          if (vertical) return vertical;
+          const indexDistance = Math.abs(left.candidateIndex - rowIndex) - Math.abs(right.candidateIndex - rowIndex);
+          return indexDistance || left.candidateIndex - right.candidateIndex;
+        })
+        .slice(0, 5)
+        .map(({ candidateRow }) => candidateRow);
       const candidateEntries = candidateRows.flatMap((candidateRow) => candidatesForRow(candidateRow).map((candidate) => ({ candidate, candidateRow })));
       const amountCandidates = candidateEntries.map(({ candidate, candidateRow }) => {
         const scored = scoredCandidate(candidateRow, candidate, 'amount');
-        if (scored) scored.confidence = Math.max(0, scored.confidence - Math.abs(candidateRow.y - row.y) / 220);
+        if (scored) {
+          const verticalDistance = Math.abs(candidateRow.y - row.y);
+          scored.confidence = Math.max(0, scored.confidence - verticalDistance / 260);
+          scored.periodContextScore = periodContextScore(`${row.searchText} ${candidateRow.searchText}`);
+          scored.anchorDistance = verticalDistance;
+        }
         return scored;
       }).filter(Boolean);
       const rateCandidates = candidateEntries.map(({ candidate, candidateRow }) => {
         const scored = scoredCandidate(candidateRow, candidate, 'rate');
-        if (scored) scored.confidence = Math.max(0, scored.confidence - Math.abs(candidateRow.y - row.y) / 220);
+        if (scored) {
+          const verticalDistance = Math.abs(candidateRow.y - row.y);
+          scored.confidence = Math.max(0, scored.confidence - verticalDistance / 260);
+          scored.periodContextScore = periodContextScore(`${row.searchText} ${candidateRow.searchText}`);
+          scored.anchorDistance = verticalDistance;
+        }
         return scored;
       }).filter(Boolean);
       amountCandidates.sort((a, b) => b.confidence - a.confidence);
@@ -266,13 +268,18 @@
     for (const match of allRowValues(rows, fieldName)) {
       const amounts = match.amountCandidates.slice(0, 5);
       const rates = match.rateCandidates.slice(0, 4);
-      for (const amount of amounts) options.push({ amount, rate: null, match, unaryScore: amount.confidence });
-      for (const rate of rates) options.push({ amount: null, rate, match, unaryScore: rate.confidence * (rate.explicitRate ? 1 : 0.92) });
+      for (const amount of amounts) options.push({ amount, rate: null, match, unaryScore: amount.confidence + amount.periodContextScore });
+      for (const rate of rates) options.push({ amount: null, rate, match, unaryScore: rate.confidence * (rate.explicitRate ? 1 : 0.92) + rate.periodContextScore });
       for (const amount of amounts) {
         for (const rate of rates) {
           if (amount.id === rate.id) continue;
           const sameRow = amount.rowId === rate.rowId;
-          options.push({ amount, rate, match, unaryScore: amount.confidence + rate.confidence + (sameRow ? 0.2 : 0) });
+          options.push({
+            amount,
+            rate,
+            match,
+            unaryScore: amount.confidence + rate.confidence + amount.periodContextScore + rate.periodContextScore + (sameRow ? 0.2 : 0),
+          });
         }
       }
     }
@@ -289,7 +296,7 @@
     for (const match of allRowValues(rows, 'insuredSalary')) {
       for (const amount of match.amountCandidates.slice(0, 8)) {
         if (!Number.isFinite(amount.value) || amount.value <= 0) continue;
-        output.push({ amount, match, unaryScore: amount.confidence * 2 + periodContextScore(match.rowText) });
+        output.push({ amount, match, unaryScore: amount.confidence * 2 + amount.periodContextScore });
       }
     }
     const unique = new Map();
@@ -539,13 +546,19 @@
 
     const combinedText = typeof input === 'string' ? input : (input && input.text) || rows.map((row) => row.directText).join('\n');
     const month = extractMonth(combinedText);
+    const monthConfidence = method === 'ocr' ? 0.75 : 0.92;
     if (month) fields.payslipMonth = {
-      value: month, unit: 'month', origin: 'direct', confidence: method === 'ocr' ? 0.75 : 0.92,
+      value: month, unit: 'month', origin: 'direct', confidence: monthConfidence, sourceDate: month,
       requiresConfirmation: false, evidence: { aliasId: 'month-pattern', page: 1, method, validation: 'format-valid' },
     };
+    if (month) Object.entries(fields).forEach(([name, item]) => {
+      if (name === 'payslipMonth' || !item) return;
+      item.sourceDate = month;
+      item.evidence = { ...item.evidence, sourceDate: month, sourceDateConfidence: monthConfidence };
+    });
 
     const contributionFields = ['employeeContributionAmount', 'employeeContributionRate', 'employerContributionAmount', 'employerContributionRate', 'severanceContributionAmount', 'severanceRate'];
-    return {
+    const output = {
       fields,
       method,
       hasCriticalFields: Boolean(fields.insuredSalary && contributionFields.some((name) => fields[name])),
@@ -559,6 +572,17 @@
         validation: result.evidence && result.evidence.validation,
       })),
     };
+    if (!output.hasCriticalFields && typeof input !== 'string' && typeof input?.text === 'string' && input.text.trim() && tokens.length) {
+      const fallback = parsePayslip(input.text, options);
+      if (fallback.hasCriticalFields) {
+        Object.values(fallback.fields).forEach((item) => {
+          if (item?.evidence) item.evidence = { ...item.evidence, observationStream: 'flattened-text-fallback' };
+        });
+        fallback.diagnostics = fallback.diagnostics.map((item) => ({ ...item, observationStream: 'flattened-text-fallback' }));
+        return fallback;
+      }
+    }
+    return output;
   }
 
   function countPayslipAnchors(text) {
