@@ -210,149 +210,153 @@
     return penalty;
   }
 
+  function normalizedRowIdentity(value) {
+    if (root.PensionReportParser?.normalizeSearchText) return root.PensionReportParser.normalizeSearchText(value || '');
+    return String(value || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  }
+
+  function samePhysicalSourceRow(candidate, member) {
+    if (candidate.pass === member.pass || candidate.row.salaryMonth !== member.row.salaryMonth) return false;
+    const candidatePage = Number(candidate.row.sourcePage || candidate.row.page);
+    const memberPage = Number(member.row.sourcePage || member.row.page);
+    if (Number.isFinite(candidatePage) && Number.isFinite(memberPage) && candidatePage !== memberPage) return false;
+    const candidateEmployer = normalizedRowIdentity(candidate.row.employerName);
+    const memberEmployer = normalizedRowIdentity(member.row.employerName);
+    if (candidateEmployer && memberEmployer && candidateEmployer !== memberEmployer) return false;
+    const candidateDeposit = candidate.row.depositDate || null;
+    const memberDeposit = member.row.depositDate || null;
+    if (candidateDeposit && memberDeposit && candidateDeposit !== memberDeposit) return false;
+
+    const candidateSource = candidate.row.evidence?.sourceRow || {};
+    const memberSource = member.row.evidence?.sourceRow || {};
+    const candidateRowId = candidateSource.id || candidate.row.evidence?.rowId || null;
+    const memberRowId = memberSource.id || member.row.evidence?.rowId || null;
+    const sameRowId = candidateRowId && memberRowId && candidateRowId === memberRowId;
+    const candidateY = Number(candidateSource.y);
+    const memberY = Number(memberSource.y);
+    const sameGeometry = Number.isFinite(candidateY) && Number.isFinite(memberY) && Math.abs(candidateY - memberY) <= 12;
+    const sameNamedDeposit = candidateDeposit && memberDeposit && candidateDeposit === memberDeposit && (!candidateEmployer || !memberEmployer || candidateEmployer === memberEmployer);
+    const uniqueMonthObservation = candidate.sameMonthPassCount === 1 && member.sameMonthPassCount === 1 && contributionRowsAgree(candidate.row, member.row);
+    return Boolean(sameRowId || sameGeometry || sameNamedDeposit || uniqueMonthObservation);
+  }
+
+  function deriveObservedComponentTotal(row) {
+    if (row.totalContribution != null) return row;
+    const componentFields = ['employeeContribution', 'employerContribution', 'severanceContribution'];
+    if (componentFields.some((name) => row[name] == null)) return row;
+    const components = componentFields.map((name) => Number(row[name]));
+    if (components.some((value) => !Number.isFinite(value) || value < 0)) return row;
+    const salary = Number(row.reportedSalary);
+    const total = components.reduce((sum, value) => sum + value, 0);
+    if (!(salary > 0) || total >= salary * 0.65) return row;
+    return {
+      ...row,
+      totalContribution: total,
+      totalSource: 'derived-from-observed-components',
+      reliable: true,
+      requiresReview: false,
+      issues: [...new Set((row.issues || []).filter((issue) => issue !== 'INCOMPLETE_CONTRIBUTION_ROW'))],
+    };
+  }
+
+  function rowFieldProvenance(row, pass) {
+    const sourceRow = row.evidence?.sourceRow || { id: row.evidence?.rowId || null, page: row.sourcePage || row.page || null, y: null };
+    return Object.fromEntries(['reportedSalary', 'employeeContribution', 'employerContribution', 'severanceContribution', 'totalContribution'].map((fieldName) => [fieldName, {
+      value: row[fieldName] ?? null,
+      field: fieldName,
+      salaryMonth: row.salaryMonth || null,
+      employerName: row.employerName || null,
+      depositDate: row.depositDate || null,
+      sourcePage: row.sourcePage || row.page || null,
+      sourceRow: sourceRow.id || null,
+      geometry: Number.isFinite(Number(sourceRow.y)) ? { y: Number(sourceRow.y) } : null,
+      extractionPass: pass,
+      observedOrDerived: fieldName === 'totalContribution' && row.totalSource === 'derived-from-observed-components' ? 'derived' : 'observed',
+    }]));
+  }
+
   function mergePensionContributionRows(passes) {
-    const byMonth = new Map();
+    const candidates = [];
     for (const pass of passes) {
       for (const row of pass.parsed?.pensionReportState?.contributionHistory || []) {
         if (!row?.salaryMonth) continue;
-        if (!byMonth.has(row.salaryMonth)) byMonth.set(row.salaryMonth, []);
-        byMonth.get(row.salaryMonth).push({ row, pass: pass.name });
+        candidates.push({ row: deriveObservedComponentTotal(row), pass: pass.name });
+      }
+    }
+    for (const candidate of candidates) {
+      candidate.sameMonthPassCount = candidates.filter((other) => other.pass === candidate.pass && other.row.salaryMonth === candidate.row.salaryMonth).length;
+    }
+    const clusters = [];
+    const identityConflicts = [];
+    for (const candidate of candidates) {
+      const compatible = clusters.filter((cluster) => cluster.members.some((member) => samePhysicalSourceRow(candidate, member)));
+      if (compatible.length === 1) compatible[0].members.push(candidate);
+      else {
+        if (compatible.length > 1) identityConflicts.push({ salaryMonth: candidate.row.salaryMonth, pass: candidate.pass, reason: 'AMBIGUOUS_SOURCE_ROW_IDENTITY' });
+        clusters.push({ members: [candidate] });
       }
     }
     const rows = [];
-    const conflicts = [];
-    const allCandidates = [...byMonth.values()].flat().filter((candidate) => candidate.row.reliable);
+    const conflicts = [...identityConflicts];
+    const allCandidates = candidates.filter((candidate) => candidate.row.reliable);
     const referenceRates = contributionReferenceRates(allCandidates);
-    for (const [salaryMonth, candidates] of byMonth) {
-      const reliable = candidates.filter((candidate) => candidate.row.reliable);
-      const pool = reliable.length ? reliable : candidates;
+    for (const cluster of clusters) {
+      const reliable = cluster.members.filter((candidate) => candidate.row.reliable);
+      const pool = reliable.length ? reliable : cluster.members;
       pool.forEach((candidate) => { candidate.quality = contributionCandidateQuality(candidate, referenceRates); });
       pool.sort((left, right) => left.quality - right.quality || Number(right.row.confidence || 0) - Number(left.row.confidence || 0));
       const selected = pool[0];
-      if (reliable.some((candidate) => candidate.quality - selected.quality <= 0.08 && !contributionRowsAgree(selected.row, candidate.row))) {
-        conflicts.push({ salaryMonth, passes: [...new Set(reliable.map((candidate) => candidate.pass))] });
+      const contradictory = reliable.filter((candidate) => !contributionRowsAgree(selected.row, candidate.row));
+      if (contradictory.length) {
+        conflicts.push({
+          salaryMonth: selected.row.salaryMonth,
+          sourcePage: selected.row.sourcePage || selected.row.page || null,
+          sourceRow: selected.row.evidence?.sourceRow?.id || selected.row.evidence?.rowId || null,
+          passes: [...new Set(reliable.map((candidate) => candidate.pass))],
+          reason: 'SAME_SOURCE_ROW_CONFLICT',
+        });
       }
-      rows.push({ ...selected.row, evidence: { ...(selected.row.evidence || {}), ocrPass: selected.pass } });
+      rows.push({
+        ...selected.row,
+        reliable: contradictory.length ? false : selected.row.reliable,
+        requiresReview: contradictory.length ? true : selected.row.requiresReview,
+        issues: contradictory.length ? [...new Set([...(selected.row.issues || []), 'OCR_PASS_ROW_CONFLICT'])] : selected.row.issues,
+        evidence: {
+          ...(selected.row.evidence || {}),
+          extractionPass: selected.pass,
+          fieldProvenance: rowFieldProvenance(selected.row, selected.pass),
+          crossPassObservations: cluster.members.map((candidate) => ({
+            extractionPass: candidate.pass,
+            sourcePage: candidate.row.sourcePage || candidate.row.page || null,
+            sourceRow: candidate.row.evidence?.sourceRow?.id || candidate.row.evidence?.rowId || null,
+            salaryMonth: candidate.row.salaryMonth,
+            employerName: candidate.row.employerName || null,
+            depositDate: candidate.row.depositDate || null,
+          })),
+        },
+      });
     }
     rows.sort((left, right) => Number(left.chronologyKey || 0) - Number(right.chronologyKey || 0));
     return { rows, conflicts };
   }
 
-  function repairMergedContributionRows(merged, passes) {
-    const reliableReferences = merged.rows.filter((row) => row.reliable && row.reportedSalary > 0);
-    if (!reliableReferences.length) return merged;
-    const rateReferences = Object.fromEntries(['employeeContribution', 'employerContribution', 'severanceContribution'].map((name) => [name,
-      medianValue(reliableReferences.map((row) => Number(row[name]) / Number(row.reportedSalary)).filter((rate) => Number.isFinite(rate) && rate >= 0.01 && rate <= 0.2)),
-    ]));
-    const candidatesByMonth = new Map();
-    for (const pass of passes) {
-      for (const row of pass.parsed?.pensionReportState?.contributionHistory || []) {
-        if (!row?.salaryMonth) continue;
-        if (!candidatesByMonth.has(row.salaryMonth)) candidatesByMonth.set(row.salaryMonth, []);
-        candidatesByMonth.get(row.salaryMonth).push({ row, pass: pass.name });
-      }
-    }
-    merged.rows = merged.rows.map((row) => {
-      if (row.reliable) return row;
-      const candidates = candidatesByMonth.get(row.salaryMonth) || [];
-      const peerRepairs = [];
-      for (const candidate of candidates) {
-        if (!(candidate.row.reportedSalary > 0)) continue;
-        for (const reference of reliableReferences) {
-          if (!approximatelyEqual(candidate.row.reportedSalary, reference.reportedSalary, 2, 0.005)) continue;
-          const matchingComponents = ['employeeContribution', 'employerContribution', 'severanceContribution']
-            .filter((name) => approximatelyEqual(candidate.row[name], reference[name], 2, 0.006)).length;
-          if (matchingComponents >= 2) peerRepairs.push({ candidate, reference, matchingComponents });
-        }
-      }
-      peerRepairs.sort((left, right) => right.matchingComponents - left.matchingComponents || Number(right.candidate.row.confidence || 0) - Number(left.candidate.row.confidence || 0));
-      if (peerRepairs.length) {
-        const repair = peerRepairs[0];
-        return {
-          ...repair.candidate.row,
-          reportedSalary: repair.reference.reportedSalary,
-          employeeContribution: repair.reference.employeeContribution,
-          employerContribution: repair.reference.employerContribution,
-          severanceContribution: repair.reference.severanceContribution,
-          totalContribution: repair.reference.totalContribution,
-          totalSource: 'document-pattern',
-          reliable: true,
-          requiresReview: false,
-          issues: ['DOCUMENT_PATTERN_RECONCILED'],
-          evidence: { ...(repair.candidate.row.evidence || {}), ocrPass: repair.candidate.pass, peerSalaryMonth: repair.reference.salaryMonth },
-        };
-      }
-      const arithmeticRepairs = candidates.map((candidate) => {
-        const salary = Number(candidate.row.reportedSalary);
-        const components = ['employeeContribution', 'employerContribution', 'severanceContribution'].map((name) => Number(candidate.row[name]));
-        if (!(salary > 0) || components.some((value) => !Number.isFinite(value) || value < 0)) return null;
-        const rateDeviation = ['employeeContribution', 'employerContribution', 'severanceContribution'].reduce((sum, name) => {
-          const reference = rateReferences[name];
-          const rate = Number(candidate.row[name]) / salary;
-          return sum + (!(reference > 0) ? 1 : Math.abs(rate - reference) / reference);
-        }, 0);
-        const total = components.reduce((sum, value) => sum + value, 0);
-        if (rateDeviation > 0.18 || total >= salary * 0.65) return null;
-        return { candidate, total, rateDeviation };
-      }).filter(Boolean).sort((left, right) => left.rateDeviation - right.rateDeviation);
-      if (!arithmeticRepairs.length) return row;
-      const repair = arithmeticRepairs[0];
-      return {
-        ...repair.candidate.row,
-        totalContribution: repair.total,
-        totalSource: 'components-document-pattern',
-        reliable: true,
-        requiresReview: false,
-        issues: ['OCR_TOTAL_RECONCILED_FROM_COMPONENTS'],
-        confidence: Math.min(0.9, Number(repair.candidate.row.confidence || 0.8)),
-        confidenceBand: 'MEDIUM',
-        evidence: { ...(repair.candidate.row.evidence || {}), ocrPass: repair.candidate.pass, documentRateReconciliation: true },
-      };
-    });
-    return merged;
-  }
-
   function applyMergedContributionRows(parsed, merged) {
     const state = parsed?.pensionReportState;
     if (!state || !merged.rows.length) return;
-    const reliableRows = merged.rows.filter((row) => row.reliable);
-    reliableRows.forEach((row) => { row.normalizationStatus = 'used'; });
-    const normalized = reliableRows.map((row) => ({
-      salaryMonth: row.salaryMonth,
-      chronologyKey: row.chronologyKey,
-      employerNames: row.employerName ? [row.employerName] : [],
-      reportedSalary: row.reportedSalary,
-      employeeContribution: row.employeeContribution,
-      employerContribution: row.employerContribution,
-      severanceContribution: row.severanceContribution,
-      totalContribution: row.totalContribution,
-      confidence: row.confidence,
-      sourceRows: [row.evidence?.rowId].filter(Boolean),
-      sourcePages: [row.sourcePage].filter(Number.isFinite),
-      status: 'reliable',
-    }));
-    const mean = (name) => normalized.length ? normalized.reduce((sum, row) => sum + Number(row[name] || 0), 0) / normalized.length : null;
-    const meanRate = (name) => {
-      const rates = normalized.filter((row) => row.reportedSalary > 0 && row[name] != null).map((row) => row[name] / row.reportedSalary);
-      return rates.length ? rates.reduce((sum, value) => sum + value, 0) / rates.length : null;
-    };
+    const baseline = root.PensionReportParser.deriveContributionBaseline(merged.rows);
+    const normalized = baseline.normalizedMonths;
     state.contributionHistory = merged.rows;
     state.normalizedContributionMonths = normalized;
-    state.derived = {
-      monthsUsed: normalized.length,
-      baselineMonthlyContribution: mean('totalContribution'),
-      averageReportedPensionSalary: mean('reportedSalary'),
-      employeeContributionRate: meanRate('employeeContribution'),
-      employerContributionRate: meanRate('employerContribution'),
-      severanceRate: meanRate('severanceContribution'),
-    };
+    state.derived = baseline.derived;
     parsed.contributionHistory = merged.rows;
     parsed.normalizedContributionMonths = normalized;
     state.extraction.counts.monthsDetected = merged.rows.length;
-    state.extraction.counts.monthsAccepted = normalized.length;
-    state.extraction.counts.monthsExcluded = merged.rows.length - normalized.length;
-    state.confidence.arithmeticConfidence = normalized.length && reliableRows.length === merged.rows.length ? 'HIGH' : 'LOW';
-    state.confidence.baselineConfidence = normalized.length && reliableRows.length === merged.rows.length ? 'HIGH' : 'LOW';
+    state.extraction.counts.monthsAccepted = baseline.derived.monthsUsed;
+    state.extraction.counts.monthsExcluded = merged.rows.filter((row) => row.normalizationStatus === 'excluded').length;
+    state.extraction.counts.monthsAmbiguous = merged.rows.filter((row) => row.normalizationStatus === 'ambiguous').length;
+    const cleanBaseline = baseline.derived.monthsUsed > 0 && baseline.issues.length === 0 && merged.rows.every((row) => row.reliable);
+    state.confidence.arithmeticConfidence = cleanBaseline ? 'HIGH' : 'LOW';
+    state.confidence.baselineConfidence = cleanBaseline ? 'HIGH' : 'LOW';
     const latest = normalized[normalized.length - 1];
     if (latest) {
       const confidence = Math.min(0.96, Number(latest.confidence || 0.88));
@@ -366,9 +370,9 @@
       setField('latestEmployerContributionAmount', latest.employerContribution, 'ILS');
       setField('latestSeveranceContributionAmount', latest.severanceContribution, 'ILS');
       if (latest.reportedSalary > 0) {
-        setField('latestEmployeeContributionRate', latest.employeeContribution / latest.reportedSalary, 'ratio', 'derived');
-        setField('latestEmployerContributionRate', latest.employerContribution / latest.reportedSalary, 'ratio', 'derived');
-        setField('latestSeveranceRate', latest.severanceContribution / latest.reportedSalary, 'ratio', 'derived');
+        if (latest.employeeContribution != null) setField('latestEmployeeContributionRate', latest.employeeContribution / latest.reportedSalary, 'ratio', 'derived');
+        if (latest.employerContribution != null) setField('latestEmployerContributionRate', latest.employerContribution / latest.reportedSalary, 'ratio', 'derived');
+        if (latest.severanceContribution != null) setField('latestSeveranceRate', latest.severanceContribution / latest.reportedSalary, 'ratio', 'derived');
       }
     }
   }
@@ -401,6 +405,38 @@
     return !tableQualityHigh || state?.extraction?.crossPathAgreement === false;
   }
 
+  function resolveFundRouting(passes) {
+    const classified = passes.map((pass) => ({
+      pass: pass.name,
+      type: pass.parsed?.pensionReportState?.fundType || 'unknown',
+      confidenceBand: pass.parsed?.pensionReportState?.confidence?.fundTypeConfidence || 'LOW',
+      evidence: pass.parsed?.pensionReportState?.evidence?.fundType?.signalIds || [],
+    })).filter((item) => item.confidenceBand === 'HIGH' && item.type !== 'unknown');
+    const types = [...new Set(classified.map((item) => item.type))];
+    if (types.length > 1) {
+      return {
+        fundType: 'unknown', supportedForCurrentForecast: false, reason: 'FUND_TYPE_CONFIRMATION_REQUIRED',
+        confidenceBand: 'LOW', conflict: true, evidence: classified,
+      };
+    }
+    if (types[0] === 'old_pension') {
+      return {
+        fundType: 'old_pension', supportedForCurrentForecast: false, reason: 'OLD_PENSION_REQUIRES_RIGHTS_BASED_MODEL',
+        confidenceBand: 'HIGH', conflict: false, evidence: classified,
+      };
+    }
+    if (types[0] === 'new_pension') {
+      return {
+        fundType: 'new_pension', supportedForCurrentForecast: true, reason: 'SUPPORTED_NEW_PENSION',
+        confidenceBand: 'HIGH', conflict: false, evidence: classified,
+      };
+    }
+    return {
+      fundType: 'unknown', supportedForCurrentForecast: false, reason: 'FUND_TYPE_CONFIRMATION_REQUIRED',
+      confidenceBand: 'LOW', conflict: false, evidence: [],
+    };
+  }
+
   function resolvePensionOcrPasses(passes) {
     const available = passes.filter((pass) => pass?.parsed);
     if (!available.length) return null;
@@ -409,7 +445,7 @@
     const selected = available[0];
     const conflicts = [];
     const agreements = [];
-    const mergedRows = repairMergedContributionRows(mergePensionContributionRows(available), available);
+    const mergedRows = mergePensionContributionRows(available);
     applyMergedContributionRows(selected.parsed, mergedRows);
     if (mergedRows.conflicts.length) conflicts.push({ pass: 'row-consensus', fields: [], contributionHistory: 'conflict', months: mergedRows.conflicts });
     const passSource = (name) => name.replace(/-linear$/, '');
@@ -447,10 +483,29 @@
       selectedState.provider = selected.parsed.fields?.pensionProvider?.value ?? null;
       selectedState.report.reportDate = selected.parsed.fields?.reportDate?.value ?? selectedState.report.reportDate;
       selectedState.report.period = selected.parsed.fields?.balanceDate?.value ?? selectedState.report.period;
+      const routing = resolveFundRouting(available);
+      selectedState.fundType = routing.fundType;
+      selectedState.supportedForCurrentForecast = routing.supportedForCurrentForecast;
+      selectedState.routingReason = routing.reason;
+      selectedState.confidence.fundTypeConfidence = routing.confidenceBand;
+      selectedState.evidence.fundType = {
+        signalIds: [...new Set(routing.evidence.flatMap((item) => item.evidence || []))],
+        confidenceBand: routing.confidenceBand,
+        extractionPasses: routing.evidence.map((item) => item.pass),
+      };
+      if (routing.conflict) conflicts.push({ pass: 'fund-type-consensus', fields: ['fundType'], contributionHistory: 'not-available' });
     }
-    for (const candidate of available.slice(1)) {
-      const history = pensionHistoryRelationship(selected.parsed, candidate.parsed);
-      if (['exact', 'left-subset', 'right-subset'].includes(history)) agreements.push({ pass: candidate.name, contributionHistory: history });
+    for (const row of mergedRows.rows) {
+      const observations = row.evidence?.crossPassObservations || [];
+      const passesForRow = [...new Set(observations.map((observation) => observation.extractionPass))];
+      if (passesForRow.length < 2 || (row.issues || []).includes('OCR_PASS_ROW_CONFLICT')) continue;
+      agreements.push({
+        passes: passesForRow,
+        contributionHistory: 'same-source-row',
+        salaryMonth: row.salaryMonth,
+        sourcePage: row.sourcePage || row.page || null,
+        sourceRow: row.evidence?.sourceRow?.id || row.evidence?.rowId || null,
+      });
     }
     const state = selected.parsed.pensionReportState;
     if (state) {
@@ -509,6 +564,9 @@
       else if (state.confidence.tableHeaderConfidence !== 'HIGH') reasons.push('CONTRIBUTION_HEADER_NOT_RECONSTRUCTED');
       if (state.confidence.arithmeticConfidence !== 'HIGH') reasons.push('CONTRIBUTION_ARITHMETIC_NOT_HIGH');
       if (conflicts.length) reasons.push('OCR_PASS_CONFLICT');
+      if (state.fundType !== 'new_pension' || state.confidence.fundTypeConfidence !== 'HIGH' || !state.supportedForCurrentForecast) {
+        reasons.push(state.fundType === 'old_pension' ? 'OLD_PENSION_REQUIRES_RIGHTS_BASED_MODEL' : 'FUND_TYPE_CONFIRMATION_REQUIRED');
+      }
       const requiredHigh = [
         state.confidence.currentBalanceConfidence,
         state.confidence.depositFeeConfidence,
@@ -518,10 +576,19 @@
         state.confidence.baselineConfidence,
         state.confidence.ocrConfidence,
       ].every((band) => band === 'HIGH');
-      const automaticAccepted = requiredHigh && reasons.length === 0;
-      state.confidence.overall = automaticAccepted ? 'HIGH' : conflicts.length ? 'LOW' : 'MEDIUM';
-      state.decision = { confidenceBand: state.confidence.overall, automaticAccepted, requiresReview: !automaticAccepted, reasons };
-      state.review = { requiresReview: !automaticAccepted, issues: reasons.map((code) => ({ code })) };
+      if (state.fundType === 'old_pension' && state.confidence.fundTypeConfidence === 'HIGH') {
+        state.confidence.overall = 'HIGH';
+        state.decision = {
+          confidenceBand: 'HIGH', automaticAccepted: false, requiresReview: false,
+          reasons: ['OLD_PENSION_REQUIRES_RIGHTS_BASED_MODEL'],
+        };
+        state.review = { requiresReview: false, issues: [] };
+      } else {
+        const automaticAccepted = requiredHigh && reasons.length === 0;
+        state.confidence.overall = automaticAccepted ? 'HIGH' : conflicts.length ? 'LOW' : 'MEDIUM';
+        state.decision = { confidenceBand: state.confidence.overall, automaticAccepted, requiresReview: !automaticAccepted, reasons: [...new Set(reasons)] };
+        state.review = { requiresReview: !automaticAccepted, issues: [...new Set(reasons)].map((code) => ({ code })) };
+      }
     }
     return selected.parsed;
   }
@@ -816,6 +883,15 @@
     field,
     emptyExtraction,
     extract,
-    _test: Object.freeze({ pdfLiteralText, parsePensionReport, looksLikeWrongDocument, classifyPdfError, pensionTableNeedsSecondSource }),
+    _test: Object.freeze({
+      pdfLiteralText,
+      parsePensionReport,
+      looksLikeWrongDocument,
+      classifyPdfError,
+      pensionTableNeedsSecondSource,
+      mergePensionContributionRows,
+      resolvePensionOcrPasses,
+      samePhysicalSourceRow,
+    }),
   });
 })(typeof window !== 'undefined' ? window : globalThis);

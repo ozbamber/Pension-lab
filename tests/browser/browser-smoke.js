@@ -122,6 +122,48 @@ async function click(cdp, selector) {
   if (!result) throw new Error(`Element not found: ${selector}`);
 }
 
+async function runRoutingUiChecks(cdp, baseUrl) {
+  await cdp.command('Page.navigate', { url: baseUrl });
+  await waitFor(() => evaluate(cdp, 'document.readyState === "complete" && Boolean(window.PensionLabTest)'), 20000, 'routing UI app load');
+
+  const oldState = await evaluate(cdp, `window.PensionLabTest.applyParsedText(${JSON.stringify('דוח שנתי קרן פנסיה ותיקה לשנת 2025')})`);
+  const oldUi = await evaluate(cdp, `({
+    flow: window.PensionLabTest.getFlowStep(),
+    message: document.querySelector('#routingMessage').textContent,
+    metricsHidden: document.querySelector('#reviewMetrics').classList.contains('hidden'),
+    historyHidden: document.querySelector('#contributionDisclosure').classList.contains('hidden'),
+    continueHidden: document.querySelector('#continueToYears').classList.contains('hidden')
+  })`);
+  if (oldState.fundType !== 'old_pension' || oldState.supportedForCurrentForecast !== false) throw new Error('Old-pension text was not routed to the unsupported state.');
+  if (oldUi.flow !== 2 || !oldUi.message.includes('זכויות') || !oldUi.metricsHidden || !oldUi.historyHidden || !oldUi.continueHidden) {
+    throw new Error(`Old-pension review did not fail closed: ${JSON.stringify(oldUi)}`);
+  }
+
+  await evaluate(cdp, 'window.PensionLabTest.reset()');
+  const unknownState = await evaluate(cdp, `window.PensionLabTest.applyParsedText(${JSON.stringify('דוח פנסיה כללי לשנת 2025')})`);
+  const unknownUi = await evaluate(cdp, `({
+    flow: window.PensionLabTest.getFlowStep(),
+    confirmationVisible: !document.querySelector('#fundTypeConfirmationWrap').classList.contains('hidden'),
+    continueDisabled: document.querySelector('#continueToYears').disabled
+  })`);
+  if (unknownState.fundType !== 'unknown' || unknownState.supportedForCurrentForecast !== false || !unknownState.review.requiresReview) {
+    throw new Error('Unknown fund type was not held for confirmation.');
+  }
+  if (unknownUi.flow !== 2 || !unknownUi.confirmationVisible || !unknownUi.continueDisabled) throw new Error(`Unknown-fund review did not require confirmation: ${JSON.stringify(unknownUi)}`);
+
+  const confirmed = await evaluate(cdp, `(() => {
+    const select = document.querySelector('#fundTypeConfirmation');
+    select.value = 'new_pension';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    return window.PensionLabTest.getPensionReportState();
+  })()`);
+  if (confirmed.fundType !== 'new_pension' || confirmed.supportedForCurrentForecast !== true || confirmed.decision.automaticAccepted !== false) {
+    throw new Error('Explicit user confirmation did not create a manual new-pension route.');
+  }
+  await evaluate(cdp, 'window.PensionLabTest.reset()');
+  console.log('✓ routing UI: old pension blocked; unknown requires explicit confirmation');
+}
+
 async function runFlow(cdp, baseUrl, viewport) {
   await cdp.command('Emulation.setDeviceMetricsOverride', { width: viewport.width, height: viewport.height, deviceScaleFactor: 1, mobile: viewport.width <= 500 });
   await cdp.command('Page.navigate', { url: baseUrl });
@@ -204,6 +246,8 @@ async function runFlow(cdp, baseUrl, viewport) {
     await cdp.command('Runtime.enable');
     await cdp.command('DOM.enable');
     await cdp.command('Network.enable');
+
+    await runRoutingUiChecks(cdp, `http://127.0.0.1:${port}/`);
 
     const results = [];
     for (const viewport of [{ name: 'desktop', width: 1440, height: 1000 }, { name: 'mobile-390', width: 390, height: 844 }]) {

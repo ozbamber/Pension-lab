@@ -2,6 +2,12 @@
   "schema_version": 2,
   "id": "pld2-bd5ea5fd46ce545e",
   "document_type": "pension_report",
+  "fund_type": "new_pension",
+  "report_type": "annual",
+  "expectedRouting": {
+    "supportedForCurrentForecast": true,
+    "reason": "SUPPORTED_NEW_PENSION"
+  },
   "member": {
     "name": "עמית בדיקה 020"
   },
@@ -40,7 +46,7 @@
     },
     "severance": {
       "rate": 0.075,
-      "amount": 1299.0
+      "amount": 1299
     }
   },
   "contribution_history": [
@@ -161,7 +167,10 @@
       "expectedAverageReportedPensionSalary",
       "expectedEmployeeContributionRate",
       "expectedEmployerContributionRate",
-      "expectedSeveranceRate"
+      "expectedSeveranceRate",
+      "fund_type",
+      "expectedRouting",
+      "report_type"
     ],
     "expected_absent_fields": [],
     "evidence": {
@@ -173,6 +182,17 @@
         "monthlyRowsReviewed": 5,
         "excludedRowsReviewed": 0,
         "geometryExtractor": "pdfplumber 0.11.9",
+        "productionParserUsed": false
+      },
+      "fundType": {
+        "method": "source_document_semantics_and_dataset_lineage",
+        "parentDocument": null,
+        "positiveSignal": "new-pension-accumulation-report-schema",
+        "productionParserUsed": false
+      },
+      "reportType": {
+        "method": "source_document_semantics_and_dataset_family",
+        "positiveSignal": "annual-report-metadata",
         "productionParserUsed": false
       }
     },

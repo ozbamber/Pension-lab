@@ -58,7 +58,21 @@ function validateGroundTruth(groundTruth) {
   }
   if (annotation.evidence !== undefined && !isPlainObject(annotation.evidence)) errors.push(`${id}: annotation.evidence must be an object`);
   if (annotation.notes !== undefined && typeof annotation.notes !== 'string') errors.push(`${id}: annotation.notes must be a string`);
-  if (groundTruth.document_type === 'pension_report') errors.push(...validatePensionContributionGroundTruth(groundTruth));
+  if (groundTruth.document_type === 'pension_report') {
+    const annotated = new Set(annotation.annotated_fields || []);
+    for (const field of ['fund_type', 'report_type', 'expectedRouting']) if (!annotated.has(field)) errors.push(`${id}: annotation.annotated_fields must include ${field}`);
+    if (!['new_pension', 'old_pension', 'unknown'].includes(groundTruth.fund_type)) errors.push(`${id}: invalid fund_type`);
+    if (!['annual', 'quarterly', 'unknown'].includes(groundTruth.report_type)) errors.push(`${id}: invalid report_type`);
+    if (!isPlainObject(groundTruth.expectedRouting)) errors.push(`${id}: expectedRouting must be an object`);
+    else {
+      if (typeof groundTruth.expectedRouting.supportedForCurrentForecast !== 'boolean') errors.push(`${id}: expectedRouting.supportedForCurrentForecast must be boolean`);
+      const expectedReason = groundTruth.fund_type === 'new_pension' ? 'SUPPORTED_NEW_PENSION'
+        : groundTruth.fund_type === 'old_pension' ? 'OLD_PENSION_REQUIRES_RIGHTS_BASED_MODEL' : 'FUND_TYPE_CONFIRMATION_REQUIRED';
+      if (groundTruth.expectedRouting.reason !== expectedReason) errors.push(`${id}: expectedRouting.reason must be ${expectedReason}`);
+      if (groundTruth.expectedRouting.supportedForCurrentForecast !== (groundTruth.fund_type === 'new_pension')) errors.push(`${id}: expectedRouting support does not match fund_type`);
+    }
+    errors.push(...validatePensionContributionGroundTruth(groundTruth));
+  }
   return errors;
 }
 
@@ -340,6 +354,11 @@ function validateDataset(projectRoot, options = {}) {
         for (const field of CONTRIBUTION_ANNOTATION_FIELDS) {
           if (JSON.stringify(parentTruth?.[field]) !== JSON.stringify(childTruth?.[field])) {
             errors.push(`${record.id}: augmented contribution truth ${field} differs from parent ${record.parent_document}`);
+          }
+        }
+        for (const field of ['fund_type', 'report_type', 'expectedRouting']) {
+          if (JSON.stringify(parentTruth?.[field]) !== JSON.stringify(childTruth?.[field])) {
+            errors.push(`${record.id}: augmented routing truth ${field} differs from parent ${record.parent_document}`);
           }
         }
       }
@@ -656,6 +675,11 @@ function extractedFieldValue(line, fieldName) {
 function pensionActuals(line) {
   const state = predictionState(line) || {};
   return {
+    fundType: state.fundType || 'unknown',
+    supportedForCurrentForecast: state.supportedForCurrentForecast === true,
+    routingReason: state.routingReason || null,
+    reportType: state.report?.type || 'unknown',
+    requiresReview: state.review?.requiresReview === true || state.decision?.requiresReview === true,
     currentBalance: finiteNumber(state.currentBalance) ?? finiteNumber(extractedFieldValue(line, 'currentBalance')),
     depositManagementFeeRate: finiteNumber(state.fees?.depositRate) ?? finiteNumber(extractedFieldValue(line, 'depositManagementFeeRate')),
     balanceManagementFeeRate: finiteNumber(state.fees?.balanceRate) ?? finiteNumber(extractedFieldValue(line, 'balanceManagementFeeRate')),
@@ -732,7 +756,8 @@ function legacyAutomaticDecision(line, actual) {
 
 function automaticDecision(line, actual) {
   const state = predictionState(line);
-  const policyEligible = [actual.currentBalance, actual.depositManagementFeeRate, actual.balanceManagementFeeRate, actual.baselineMonthlyContribution]
+  const policyEligible = state?.fundType === 'new_pension' && state?.supportedForCurrentForecast === true &&
+    [actual.currentBalance, actual.depositManagementFeeRate, actual.balanceManagementFeeRate, actual.baselineMonthlyContribution]
     .every((value) => value !== null) && actual.normalizedContributionMonths.length > 0 &&
     state?.extraction?.tableTotalReconciliation?.pass !== false &&
     !actual.contributionHistory.some((row) => row.normalizationStatus === 'ambiguous');
@@ -773,17 +798,94 @@ function extractionEvidence(line, actual) {
 
 function decideFailureType(document) {
   if (!document.criticalAvailability.currentBalance) return 'BALANCE_EXTRACTION_FAILED';
-  if (!document.criticalAvailability.depositManagementFeeRate || !document.criticalAvailability.balanceManagementFeeRate) return 'FEE_EXTRACTION_FAILED';
+  if (!document.criticalAvailability.depositManagementFeeRate) return 'DEPOSIT_FEE_EXTRACTION_FAILED';
+  if (!document.criticalAvailability.balanceManagementFeeRate) return 'BALANCE_FEE_EXTRACTION_FAILED';
   if (!document.tableDetected) return 'TABLE_NOT_FOUND';
   if (!document.headerDetected) return 'HEADER_NOT_RECONSTRUCTED';
   if (!document.geometryAvailable && document.rowDetection.detected < document.rowDetection.expected) return 'COLUMN_ASSIGNMENT_FAILED';
-  if (document.rowDetection.detected < document.rowDetection.expected) return document.extractionMethod === 'ocr' ? 'OCR_DIGIT_ERROR' : 'ROW_SPLIT_FAILED';
+  if (document.rowDetection.detected < document.rowDetection.expected) return document.extractionMethod === 'ocr' ? 'OCR_DIGIT_ERROR' : 'ROW_RECONSTRUCTION_FAILED';
   if (!document.reconciliationPass) return 'TOTAL_RECONCILIATION_FAILED';
   if (!document.normalizationPass && document.normalizationIssue) return 'DUPLICATE_AMBIGUITY';
   if (!document.criticalFields.currentBalance) return 'BALANCE_EXTRACTION_FAILED';
-  if (!document.criticalFields.depositManagementFeeRate || !document.criticalFields.balanceManagementFeeRate) return 'FEE_EXTRACTION_FAILED';
+  if (!document.criticalFields.depositManagementFeeRate) return 'DEPOSIT_FEE_EXTRACTION_FAILED';
+  if (!document.criticalFields.balanceManagementFeeRate) return 'BALANCE_FEE_EXTRACTION_FAILED';
   if (!document.normalizationPass) return document.extractionMethod === 'ocr' ? 'OCR_DIGIT_ERROR' : 'COLUMN_ASSIGNMENT_FAILED';
   return 'OTHER';
+}
+
+function logChoose(n, k) {
+  const limit = Math.min(k, n - k);
+  let value = 0;
+  for (let index = 1; index <= limit; index += 1) value += Math.log(n - limit + index) - Math.log(index);
+  return value;
+}
+
+function binomialTailAtLeast(successes, trials, probability) {
+  if (successes <= 0) return 1;
+  if (successes > trials || probability <= 0) return 0;
+  if (probability >= 1) return 1;
+  let term = Math.exp(logChoose(trials, successes) + successes * Math.log(probability) + (trials - successes) * Math.log1p(-probability));
+  let total = term;
+  for (let count = successes; count < trials; count += 1) {
+    term *= ((trials - count) / (count + 1)) * (probability / (1 - probability));
+    total += term;
+  }
+  return Math.max(0, Math.min(1, total));
+}
+
+function oneSidedClopperPearsonLower(successes, failures, confidence = 0.95) {
+  const passed = Number(successes);
+  const failed = Number(failures);
+  const trials = passed + failed;
+  if (!Number.isInteger(passed) || !Number.isInteger(failed) || passed < 0 || failed < 0 || !trials) return null;
+  if (passed === 0) return 0;
+  const alpha = 1 - confidence;
+  let low = 0;
+  let high = 1;
+  for (let iteration = 0; iteration < 100; iteration += 1) {
+    const middle = (low + high) / 2;
+    if (binomialTailAtLeast(passed, trials, middle) < alpha) low = middle;
+    else high = middle;
+  }
+  return (low + high) / 2;
+}
+
+function additionalSuccessesForLowerBound(successes, failures, target = 0.95, confidence = 0.95) {
+  for (let additional = 0; additional <= 100000; additional += 1) {
+    if (oneSidedClopperPearsonLower(successes + additional, failures, confidence) >= target) return additional;
+  }
+  return null;
+}
+
+function automaticAccuracyStatistics(documents) {
+  const automatic = documents.filter((document) => document.automaticAccepted);
+  const successes = automatic.filter((document) => document.criticalPass).length;
+  const failures = automatic.length - successes;
+  return {
+    successes,
+    failures,
+    observedAccuracy: automatic.length ? successes / automatic.length : null,
+    oneSided95LowerBound: automatic.length ? oneSidedClopperPearsonLower(successes, failures, 0.95) : null,
+    independentSampleSize: automatic.length,
+    requiredIndependentSuccessesWithZeroFailures: 59,
+    additionalZeroFailureSuccessesRequired: additionalSuccessesForLowerBound(successes, failures, 0.95, 0.95),
+    statisticallyDefensible95At95: automatic.length > 0 && oneSidedClopperPearsonLower(successes, failures, 0.95) >= 0.95,
+  };
+}
+
+function aggregateRoutingDocuments(documents) {
+  const correct = documents.filter((document) => document.routingCorrect).length;
+  const classifiedCorrectly = documents.filter((document) => document.fundTypeClassificationCorrect).length;
+  const incorrectlyForecasted = documents.filter((document) => document.incorrectlyForecasted).length;
+  return {
+    documents: documents.length,
+    correctlyRouted: correct,
+    incorrectlyRouted: documents.length - correct,
+    correctlyClassifiedFundType: classifiedCorrectly,
+    fundTypeClassificationAccuracy: documents.length ? classifiedCorrectly / documents.length : null,
+    incorrectlyForecasted,
+    routingAccuracy: documents.length ? correct / documents.length : null,
+  };
 }
 
 function aggregatePensionExtractionDocuments(documents) {
@@ -810,6 +912,7 @@ function aggregatePensionExtractionDocuments(documents) {
   const rowPrecision = detectedRows + falseExtraRows ? detectedRows / (detectedRows + falseExtraRows) : null;
   const rowRecall = expectedRows ? detectedRows / expectedRows : null;
   const rowF1 = rowPrecision != null && rowRecall != null && rowPrecision + rowRecall > 0 ? 2 * rowPrecision * rowRecall / (rowPrecision + rowRecall) : null;
+  const independentDocuments = documents.filter((document) => document.lineage === 'independent-parent');
   return {
     documents: documents.length,
     automaticDocuments: automatic.length,
@@ -820,6 +923,9 @@ function aggregatePensionExtractionDocuments(documents) {
     unsafeWrongAcceptances,
     unsafeWrongAcceptanceRate: documents.length ? unsafeWrongAcceptances / documents.length : null,
     safeOutcomeRate: documents.length ? 1 - unsafeWrongAcceptances / documents.length : null,
+    independentParentCount: independentDocuments.length,
+    augmentationCount: documents.length - independentDocuments.length,
+    statisticalAccuracy: automaticAccuracyStatistics(independentDocuments),
     tableDetection: { expected: expectedTables, detected: detectedTables, recall: expectedTables ? detectedTables / expectedTables : null },
     rowDetection: { expected: expectedRows, detected: detectedRows, falseExtra: falseExtraRows, precision: rowPrecision, recall: rowRecall, f1: rowF1 },
     rowFieldAccuracy: fieldAccuracy,
@@ -853,8 +959,10 @@ function evaluatePensionReportExtraction(projectRoot, predictionLines, options =
 
   for (const record of selected) {
     const truth = dataset.groundTruth.get(record.id);
+    const hasPrediction = predictions.has(record.id);
     const line = predictions.get(record.id) || { id: record.id };
     const actual = pensionActuals(line);
+    const state = predictionState(line) || {};
     const rawMatch = matchContributionRows(truth.contribution_history, actual.contributionHistory);
     const normalizedMatch = matchContributionRows(truth.normalizedContributionMonths, actual.normalizedContributionMonths);
     const rowFields = Object.fromEntries(CONTRIBUTION_FIELDS.map((field) => [field, { correct: 0, total: truth.contribution_history.length }]));
@@ -887,14 +995,36 @@ function evaluatePensionReportExtraction(projectRoot, predictionLines, options =
     const severanceRatePass = valuesMatch('expectedSeveranceRate', truth.expectedSeveranceRate, actual.severanceRate);
     const criticalPass = Object.values(criticalFields).every(Boolean) && normalizationPass && baselinePass;
     const automaticAccepted = automaticDecision(line, actual);
+    const expectedFundType = truth.fund_type || 'unknown';
+    const expectedSupported = truth.expectedRouting?.supportedForCurrentForecast === true;
+    const actualFundType = actual.fundType;
+    const actualSupported = actual.supportedForCurrentForecast;
+    const incorrectlyForecasted = !expectedSupported && (actualSupported || automaticAccepted);
+    const fundTypeClassificationCorrect = actualFundType === expectedFundType;
+    const routingCorrect = hasPrediction && (expectedFundType === 'unknown'
+      ? actualFundType === 'unknown' && !actualSupported && actual.requiresReview
+      : expectedFundType === 'old_pension'
+        ? !actualSupported && !automaticAccepted
+        : actualFundType === 'new_pension' && actualSupported);
     const normalizationIssue = expectedDuplicates.length || expectedAmbiguous.length || actual.contributionHistory.some((row) => row.normalizationStatus === 'ambiguous');
     const document = {
       id: record.id,
       split: record.split,
-      reportType: record.family === 'quarterly' ? 'quarterly' : 'annual',
+      fundType: expectedFundType,
+      actualFundType,
+      expectedSupportedForCurrentForecast: expectedSupported,
+      actualSupportedForCurrentForecast: actualSupported,
+      routingReason: actual.routingReason,
+      decisionReasons: Array.isArray(state.decision?.reasons) ? state.decision.reasons : [],
+      routingCorrect,
+      fundTypeClassificationCorrect,
+      incorrectlyForecasted,
+      reportType: truth.report_type || 'unknown',
+      actualReportType: actual.reportType,
       textLayer: record.has_text_layer ? 'text-layer' : 'image-only',
-      lineage: record.source_type === 'augmented' ? 'augmented-child' : 'synthetic-parent',
+      lineage: record.source_type === 'augmented' ? 'augmentation' : 'independent-parent',
       extractionMethod: evidence.extractionMethod,
+      extractionPasses: state?.extraction?.multiPass?.passes?.map((pass) => pass.name) || (evidence.extractionMethod ? [evidence.extractionMethod] : []),
       confidence: evidence.confidence,
       automaticAccepted,
       criticalPass,
@@ -932,44 +1062,78 @@ function evaluatePensionReportExtraction(projectRoot, predictionLines, options =
         baselineMonthlyContribution: actual.baselineMonthlyContribution,
       },
     };
-    document.failureType = criticalPass && automaticAccepted ? null : decideFailureType(document);
+    document.failureType = expectedFundType === 'old_pension'
+      ? (!routingCorrect ? 'UNSUPPORTED_OLD_PENSION' : !fundTypeClassificationCorrect ? 'FUND_TYPE_UNKNOWN' : null)
+      : expectedFundType === 'unknown'
+        ? (routingCorrect ? null : 'FUND_TYPE_ROUTING_FAILED')
+        : routingCorrect && criticalPass && automaticAccepted ? null
+          : (!routingCorrect ? (actualFundType === 'unknown' ? 'FUND_TYPE_UNKNOWN' : 'FUND_TYPE_ROUTING_FAILED') : decideFailureType(document));
     documents.push(document);
   }
 
-  const groupBy = (selector) => Object.fromEntries([...new Set(documents.map(selector))].sort().map((key) => [key, aggregatePensionExtractionDocuments(documents.filter((document) => selector(document) === key))]));
-  const diagnostics = documents.filter((document) => !document.criticalPass || !document.automaticAccepted).map((document) => ({
+  const supportedNewDocuments = documents.filter((document) => document.fundType === 'new_pension');
+  const supportedNewParents = supportedNewDocuments.filter((document) => document.lineage === 'independent-parent');
+  const oldPensionDocuments = documents.filter((document) => document.fundType === 'old_pension');
+  const unknownDocuments = documents.filter((document) => document.fundType === 'unknown');
+  const groupBy = (source, selector) => Object.fromEntries([...new Set(source.map(selector))].sort()
+    .map((key) => [key, aggregatePensionExtractionDocuments(source.filter((document) => selector(document) === key))]));
+  const valueStatus = (available, correct) => !available ? 'missing' : correct ? 'correct' : 'incorrect';
+  const diagnostics = documents.filter((document) => document.failureType).map((document) => ({
     documentId: document.id,
-    stage: document.failureType === 'BALANCE_EXTRACTION_FAILED' || document.failureType === 'FEE_EXTRACTION_FAILED' ? 'document-fields'
+    fundType: document.fundType,
+    reportType: document.reportType,
+    failureStage: document.failureType === 'FUND_TYPE_UNKNOWN' || document.failureType === 'FUND_TYPE_ROUTING_FAILED' || document.failureType === 'UNSUPPORTED_OLD_PENSION' ? 'routing'
+      : document.failureType === 'BALANCE_EXTRACTION_FAILED' || document.failureType === 'DEPOSIT_FEE_EXTRACTION_FAILED' || document.failureType === 'BALANCE_FEE_EXTRACTION_FAILED' ? 'document-fields'
       : document.failureType === 'DUPLICATE_AMBIGUITY' ? 'normalization'
         : document.failureType === 'TABLE_NOT_FOUND' || document.failureType === 'HEADER_NOT_RECONSTRUCTED' ? 'table-detection'
           : 'table-extraction',
-    expected: document.expected,
-    actual: document.actual,
     failureType: document.failureType,
+    reasons: [...new Set([document.failureType, ...document.decisionReasons])],
     confidence: document.confidence,
     tableDetected: document.tableDetected,
-    headerDetected: document.headerDetected,
-    geometryAvailable: document.geometryAvailable,
+    rowsExpected: document.rowDetection.expected,
+    rowsDetected: document.rowDetection.detected,
+    currentBalanceStatus: valueStatus(document.criticalAvailability.currentBalance, document.criticalFields.currentBalance),
+    depositFeeStatus: valueStatus(document.criticalAvailability.depositManagementFeeRate, document.criticalFields.depositManagementFeeRate),
+    balanceFeeStatus: valueStatus(document.criticalAvailability.balanceManagementFeeRate, document.criticalFields.balanceManagementFeeRate),
+    baselineStatus: valueStatus(document.actual.baselineMonthlyContribution != null, document.baselinePass),
+    reconciliationStatus: document.reconciliationPass ? 'pass' : 'failed',
+    currentBalanceFound: document.criticalAvailability.currentBalance,
+    depositFeeFound: document.criticalAvailability.depositManagementFeeRate,
+    balanceFeeFound: document.criticalAvailability.balanceManagementFeeRate,
+    normalizationPass: document.normalizationPass,
     reconciliationPass: document.reconciliationPass,
-    extractionMethod: document.extractionMethod,
+    extractionPasses: document.extractionPasses,
     automaticAccepted: document.automaticAccepted,
-    criticalPass: document.criticalPass,
   }));
   const failureReasonCounts = {};
   diagnostics.forEach((diagnostic) => { failureReasonCounts[diagnostic.failureType] = (failureReasonCounts[diagnostic.failureType] || 0) + 1; });
+  const supportedNewFailureReasonCounts = {};
+  diagnostics.filter((diagnostic) => diagnostic.fundType === 'new_pension').forEach((diagnostic) => {
+    supportedNewFailureReasonCounts[diagnostic.failureType] = (supportedNewFailureReasonCounts[diagnostic.failureType] || 0) + 1;
+  });
   return {
     schemaVersion: 2,
     evaluatedAt: new Date().toISOString(),
     split: options.split || 'all',
-    summary: aggregatePensionExtractionDocuments(documents),
-    headlineSummary: aggregatePensionExtractionDocuments(documents.filter((document) => document.lineage === 'synthetic-parent')),
+    summary: aggregatePensionExtractionDocuments(supportedNewDocuments),
+    headlineSummary: aggregatePensionExtractionDocuments(supportedNewParents),
+    allDocumentRouting: aggregateRoutingDocuments(documents),
+    oldPensionRouting: aggregateRoutingDocuments(oldPensionDocuments),
+    unknownRouting: aggregateRoutingDocuments(unknownDocuments),
+    lineage: {
+      independentParentCount: documents.filter((document) => document.lineage === 'independent-parent').length,
+      augmentationCount: documents.filter((document) => document.lineage === 'augmentation').length,
+    },
     groups: {
-      reportType: groupBy((document) => document.reportType),
-      textLayer: groupBy((document) => document.textLayer),
-      lineage: groupBy((document) => document.lineage),
-      split: groupBy((document) => document.split),
+      fundType: groupBy(documents, (document) => document.fundType),
+      reportType: groupBy(supportedNewDocuments, (document) => document.reportType),
+      textLayer: groupBy(supportedNewDocuments, (document) => document.textLayer),
+      lineage: groupBy(supportedNewDocuments, (document) => document.lineage),
+      split: groupBy(supportedNewDocuments, (document) => document.split),
     },
     failureReasonCounts,
+    supportedNewFailureReasonCounts,
     diagnostics,
     documents,
   };
@@ -996,4 +1160,6 @@ module.exports = {
   validatePensionContributionGroundTruth,
   matchContributionRows,
   evaluatePensionReportExtraction,
+  oneSidedClopperPearsonLower,
+  automaticAccuracyStatistics,
 };

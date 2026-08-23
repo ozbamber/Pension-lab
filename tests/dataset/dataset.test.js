@@ -15,6 +15,7 @@ const {
   validationChecksPossible,
   CORE_FIELDS,
   evaluatePensionReportExtraction,
+  oneSidedClopperPearsonLower,
 } = require('../../scripts/dataset/lib/dataset-core');
 
 const projectRoot = path.resolve(__dirname, '..', '..');
@@ -68,6 +69,12 @@ test('all pension reports have direct contribution-history and derived ground tr
     assert.strictEqual(truth.contribution_history.length, 5);
     assert.strictEqual(truth.normalizedContributionMonths.length, 5);
     assert.ok(truth.annotation.annotated_fields.includes('expectedBaselineMonthlyContribution'));
+    assert.ok(['new_pension', 'old_pension'].includes(truth.fund_type));
+    assert.ok(truth.annotation.annotated_fields.includes('fund_type'));
+    assert.ok(['annual', 'quarterly'].includes(truth.report_type));
+    assert.ok(truth.annotation.annotated_fields.includes('report_type'));
+    assert.ok(truth.annotation.annotated_fields.includes('expectedRouting'));
+    assert.strictEqual(truth.expectedRouting.supportedForCurrentForecast, truth.fund_type === 'new_pension');
     assert.strictEqual(truth.annotation.evidence.contributionHistory.productionParserUsed, false);
     monthlyRows += truth.contribution_history.length;
   }
@@ -169,7 +176,11 @@ function perfectPensionPredictions() {
         balanceManagementFeeRate: { value: truth.fees.personal.balance_rate },
       },
       pensionReportState: {
+        fundType: truth.fund_type,
+        supportedForCurrentForecast: truth.expectedRouting.supportedForCurrentForecast,
+        routingReason: truth.expectedRouting.reason,
         currentBalance: truth.balances.closing,
+        report: { type: truth.report.quarter == null ? 'annual' : 'quarterly' },
         fees: { depositRate: truth.fees.personal.deposit_rate, balanceRate: truth.fees.personal.balance_rate },
         contributionHistory: truth.contribution_history.map((row) => ({ ...row, reliable: true, normalizationStatus: 'used' })),
         normalizedContributionMonths: truth.normalizedContributionMonths,
@@ -185,7 +196,9 @@ function perfectPensionPredictions() {
           tables: [{ headerRows: ['header'] }],
           tableTotalReconciliation: { pass: true },
         },
-        decision: { confidenceBand: 'HIGH', automaticAccepted: true },
+        confidence: { overall: 'HIGH', fundTypeConfidence: 'HIGH' },
+        decision: { confidenceBand: 'HIGH', automaticAccepted: truth.fund_type === 'new_pension', requiresReview: false },
+        review: { requiresReview: false, issues: [] },
       },
     };
   });
@@ -193,10 +206,10 @@ function perfectPensionPredictions() {
 
 test('pension extraction metrics require correct automatic documents and full rows', () => {
   const result = evaluatePensionReportExtraction(projectRoot, perfectPensionPredictions());
-  assert.strictEqual(result.summary.documents, 34);
+  assert.strictEqual(result.summary.documents, 30);
   assert.strictEqual(result.summary.automaticDocuments, 30);
-  assert.strictEqual(result.summary.reviewDocuments, 4);
-  assert.strictEqual(result.summary.automaticCoverage, 30 / 34);
+  assert.strictEqual(result.summary.reviewDocuments, 0);
+  assert.strictEqual(result.summary.automaticCoverage, 1);
   assert.strictEqual(result.summary.automaticCriticalAccuracy, 1);
   assert.strictEqual(result.summary.unsafeWrongAcceptances, 0);
   assert.strictEqual(result.summary.tableDetection.recall, 1);
@@ -204,6 +217,22 @@ test('pension extraction metrics require correct automatic documents and full ro
   assert.strictEqual(result.summary.rowDetection.recall, 1);
   assert.strictEqual(result.summary.rowDetection.f1, 1);
   assert.strictEqual(result.summary.derived.baselineMonthlyContributionAccuracy, 1);
+  assert.strictEqual(result.headlineSummary.documents, 21);
+  assert.strictEqual(result.headlineSummary.statisticalAccuracy.successes, 21);
+  assert.strictEqual(result.headlineSummary.statisticalAccuracy.failures, 0);
+  assert.strictEqual(result.headlineSummary.statisticalAccuracy.additionalZeroFailureSuccessesRequired, 38);
+  assert.strictEqual(result.oldPensionRouting.documents, 4);
+  assert.strictEqual(result.oldPensionRouting.correctlyRouted, 4);
+  assert.strictEqual(result.oldPensionRouting.incorrectlyForecasted, 0);
+  assert.strictEqual(result.allDocumentRouting.routingAccuracy, 1);
+  assert.deepStrictEqual(result.supportedNewFailureReasonCounts, {});
+  assert.strictEqual(result.groups.reportType.annual.documents + result.groups.reportType.quarterly.documents, 30);
+});
+
+test('one-sided exact-binomial lower bound requires 59 zero-failure successes for 95/95', () => {
+  assert.ok(oneSidedClopperPearsonLower(58, 0) < 0.95);
+  assert.ok(oneSidedClopperPearsonLower(59, 0) >= 0.95);
+  assert.ok(Math.abs(oneSidedClopperPearsonLower(21, 0) - Math.pow(0.05, 1 / 21)) < 1e-12);
 });
 
 test('unsafe automatic acceptance is counted while review remains a safe outcome', () => {
@@ -214,9 +243,15 @@ test('unsafe automatic acceptance is counted while review remains a safe outcome
   eligible[1].pensionReportState.decision = { confidenceBand: 'LOW', automaticAccepted: false };
   const result = evaluatePensionReportExtraction(projectRoot, predictions);
   assert.strictEqual(result.summary.unsafeWrongAcceptances, 1);
-  assert.strictEqual(result.summary.reviewDocuments, 5);
-  assert.strictEqual(result.summary.safeOutcomeRate, 33 / 34);
+  assert.strictEqual(result.summary.reviewDocuments, 1);
+  assert.strictEqual(result.summary.safeOutcomeRate, 29 / 30);
   assert.strictEqual(result.failureReasonCounts.BALANCE_EXTRACTION_FAILED, 2);
+  const diagnostic = result.diagnostics.find((item) => item.documentId === eligible[0].id);
+  assert.strictEqual(diagnostic.currentBalanceStatus, 'incorrect');
+  assert.strictEqual(diagnostic.depositFeeStatus, 'correct');
+  assert.strictEqual(diagnostic.balanceFeeStatus, 'correct');
+  assert.strictEqual(diagnostic.baselineStatus, 'correct');
+  assert.strictEqual(diagnostic.reconciliationStatus, 'pass');
 });
 
 console.log(`All ${passed} dataset tests passed.`);

@@ -11,17 +11,23 @@ function printGroup(name, group) {
 function printPensionExtractionMetrics(metrics, title = 'Pension-report extraction metrics') {
   const summary = metrics.summary;
   console.log(`${title}:`);
-  if (metrics.headlineSummary && metrics.headlineSummary.documents !== summary.documents) {
+  if (metrics.headlineSummary) {
     const headline = metrics.headlineSummary;
-    console.log(`  Headline synthetic parents: ${headline.automaticDocuments}/${headline.documents} automatic (${pct(headline.automaticCoverage)}) @ ${pct(headline.automaticCriticalAccuracy)} critical; unsafe=${headline.unsafeWrongAcceptances}`);
+    console.log(`  HEADLINE supported new-pension independent parents: ${headline.automaticDocuments}/${headline.documents} automatic (${pct(headline.automaticCoverage)}) @ ${pct(headline.automaticCriticalAccuracy)} critical; unsafe=${headline.unsafeWrongAcceptances}`);
+    const stats = headline.statisticalAccuracy;
+    console.log(`  Exact-binomial accuracy: successes=${stats.successes}; failures=${stats.failures}; observed=${pct(stats.observedAccuracy)}; one-sided 95% lower bound=${pct(stats.oneSided95LowerBound)}; independent automatic n=${stats.independentSampleSize}; additional zero-failure successes required=${stats.additionalZeroFailureSuccessesRequired}`);
   }
-  console.log(`  Documents: ${summary.documents}`);
+  console.log(`  Supported new-pension documents (parents + augmentations): ${summary.documents}`);
   console.log(`  Automatic documents: ${summary.automaticDocuments}; review documents: ${summary.reviewDocuments}`);
   console.log(`  Automatic coverage: ${pct(summary.automaticCoverage)}`);
   console.log(`  Automatic critical accuracy: ${pct(summary.automaticCriticalAccuracy)}`);
   console.log(`  Review rate: ${pct(summary.reviewRate)}`);
   console.log(`  Unsafe wrong acceptances: ${summary.unsafeWrongAcceptances} (${pct(summary.unsafeWrongAcceptanceRate)})`);
   console.log(`  Safe outcome rate: ${pct(summary.safeOutcomeRate)}`);
+  console.log(`  Independent parents: ${summary.independentParentCount}; augmentations: ${summary.augmentationCount}`);
+  console.log(`  Old-pension safe unsupported routing: ${metrics.oldPensionRouting.correctlyRouted}/${metrics.oldPensionRouting.documents}; exact fund classification=${metrics.oldPensionRouting.correctlyClassifiedFundType}/${metrics.oldPensionRouting.documents} (${pct(metrics.oldPensionRouting.fundTypeClassificationAccuracy)}); incorrectly forecasted=${metrics.oldPensionRouting.incorrectlyForecasted}; routing accuracy=${pct(metrics.oldPensionRouting.routingAccuracy)}`);
+  console.log(`  Unknown routing: ${metrics.unknownRouting.correctlyRouted}/${metrics.unknownRouting.documents}; accuracy=${pct(metrics.unknownRouting.routingAccuracy)}`);
+  console.log(`  All-document routing: ${metrics.allDocumentRouting.correctlyRouted}/${metrics.allDocumentRouting.documents}; incorrectly forecasted=${metrics.allDocumentRouting.incorrectlyForecasted}; accuracy=${pct(metrics.allDocumentRouting.routingAccuracy)}`);
   console.log(`  Tables: expected=${summary.tableDetection.expected}; detected=${summary.tableDetection.detected}; recall=${pct(summary.tableDetection.recall)}`);
   console.log(`  Rows: expected=${summary.rowDetection.expected}; detected=${summary.rowDetection.detected}; false extras=${summary.rowDetection.falseExtra}; precision=${pct(summary.rowDetection.precision)}; recall=${pct(summary.rowDetection.recall)}; F1=${pct(summary.rowDetection.f1)}`);
   console.log('  Row field accuracy:');
@@ -37,10 +43,10 @@ function printPensionExtractionMetrics(metrics, title = 'Pension-report extracti
   for (const [name, group] of Object.entries(metrics.groups.reportType)) printGroup(name, group);
   console.log('  Text-layer vs image-only:');
   for (const [name, group] of Object.entries(metrics.groups.textLayer)) printGroup(name, group);
-  console.log('  Synthetic parents vs augmented children:');
+  console.log('  Independent parents vs augmentations:');
   for (const [name, group] of Object.entries(metrics.groups.lineage)) printGroup(name, group);
-  console.log('  Failure reasons:');
-  const failures = Object.entries(metrics.failureReasonCounts);
+  console.log('  Remaining supported-new failure reasons:');
+  const failures = Object.entries(metrics.supportedNewFailureReasonCounts || metrics.failureReasonCounts);
   if (!failures.length) console.log('    none');
   else failures.sort(([left], [right]) => left.localeCompare(right)).forEach(([reason, count]) => console.log(`    ${reason}: ${count}`));
 }

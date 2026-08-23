@@ -9,14 +9,18 @@ This review covers Pension Report Extraction Engine V2 on `codex/dataset-v2-eval
 - `npm run test:engine`: **23/23** projection-engine tests passed.
 - `npm run test:documents`: **10/10** document-model tests passed.
 - `npm run test:ocr`: **30/30** financial/spatial parser tests passed.
-- `npm run test:pension`: **24/24** legacy pension-report/reconciliation regressions, **14/14** pension-report-state acceptance tests, and **24/24** Engine V2 table regressions passed.
-- `npm run test:dataset`: **12/12** Dataset v2 contract and safety-aware metric tests passed.
+- `npm run test:pension`: **24/24** legacy pension-report/reconciliation regressions, **14/14** pension-report-state acceptance tests, **24/24** Engine V2 table regressions, and **28/28** fund-routing/source-safety regressions passed.
+- `npm run test:dataset`: **13/13** Dataset v2 contract, exact-binomial, diagnostics, and safety-aware metric tests passed.
 - `npm run dataset:validate`: **70/70** documents and ground-truth records passed; 55 have a text layer and 15 are image-only.
-- `npm run test:browser:smoke`: the complete report-only flow passed at **1440×1000** and **390×844**, including exact 144-month projection for 12 years, real/nominal switching, no payslip or age fields, no PR2 controls, and no horizontal overflow.
+- `npm run dataset:benchmark:text`: all 55 eligible text observations completed; supported-new independent parents were **21/21** automatic with **100.0%** critical accuracy and **0** unsafe acceptances.
+- `npm run dataset:benchmark:browser`: all **34/34** pension PDFs completed through the real local browser pipeline; detailed supported-new and routing results appear below.
+- `npm run dataset:benchmark:compare -- --before-ref 2a6f05b8a0d38830da5ecc606dd124b99ba6ebf6`: extraction field/critical/validation metrics remained **88.2% / 96.0% / 100.0%** while the new routing contract made all **21/21** supported-new parents eligible for safe automatic acceptance.
+- `npm run test:browser:smoke`: old-pension blocking and unknown-fund confirmation passed; the complete report-only flow also passed at **1440×1000** and **390×844**, including exact 144-month projection for 12 years, real/nominal switching, no payslip or age fields, no PR2 controls, and no horizontal overflow.
 - `npm run test:browser:ocr`: **5/5** native-report, local OCR, privacy/session, mobile-overflow, and cancellation groups passed.
 - `npm run test:browser:standalone`: **4/4** generated-artifact groups passed, including 10 local vendor URLs, native report parsing, scanned report OCR, and zero 404/console/runtime/network-loading errors.
-- `npm run build`: generated **219 files** from canonical `app/`, including `dist/pension-lab-he-standalone.html`.
+- `npm run build`: generated **219 files** from canonical `app/`, including `dist/pension-lab-he-standalone.html`; two consecutive builds produced identical SHA256 `4D9CACF080987820FADE7EB0E1216A7435F741200F964C81C2582CC7D2E405D7`.
 - `npm run check:standalone`: **6/6** authored inline script blocks passed syntax validation.
+- `node --check` over `app/`, `scripts/`, and `tests/`: **35/35** JavaScript files passed syntax validation.
 
 ## Product-flow verification
 
@@ -46,33 +50,39 @@ This review covers Pension Report Extraction Engine V2 on `codex/dataset-v2-eval
 
 ## Dataset v2 pension-report metrics
 
-All **34** pension-report records have direct contribution-table ground truth: **170** monthly rows plus separately annotated annual/YTD exclusions. The headline set contains the **24 independent synthetic parents**; the 10 augmented children are reported separately and are not counted as independent evidence.
+All **34** pension-report records have direct contribution-table ground truth: **170** monthly rows plus separately annotated annual/YTD exclusions. Fund type and report type are annotated independently. The corpus contains **21 supported-new independent parents**, **3 old-pension parents**, **9 supported-new augmentations**, and **1 old-pension augmentation**. Augmented children are never counted as independent statistical evidence.
 
 ### Fast text-layer benchmark
 
-- All text-layer records: **25** documents; **84.0%** automatic coverage, **100.0%** automatic critical accuracy, and **0** unsafe automatic acceptances.
-- Row detection: **100.0% precision**, **96.0% recall**, **98.0% F1**; every scored row field and normalized-month output was **96.0%** accurate.
-- Independent-parent headline: **21/24** automatic (**87.5%**), **100.0%** automatic critical accuracy, **0** unsafe acceptances, and **100.0%** row precision/recall/F1, normalization, baseline, average salary, rates, balance, and fee accuracy.
-- The additional mixed text/OCR augmentation is deliberately incomplete on the text path and correctly remains in review.
+- Supported-new text-layer records: **21/22** automatic (**95.5%**), **100.0%** automatic critical accuracy, and **0** unsafe automatic acceptances.
+- Row detection: **100.0% precision**, **95.5% recall**, and **97.7% F1**. Baseline accuracy is **95.5%**; balance and both personal-fee fields are **100.0%** accurate.
+- Supported-new independent-parent headline: **21/21** automatic (**100.0%**), **100.0%** automatic critical accuracy, **0** unsafe acceptances, and **100.0%** row precision/recall/F1, normalization, baseline, balance, and fee accuracy.
+- Old-pension text routing is **3/3** safely unsupported with **3/3** exact fund classification and **0** forecasts. The mixed text/OCR supported-new augmentation remains review-only with `COLUMN_ASSIGNMENT_FAILED`.
 
 ### Full local-browser benchmark
 
-- All records: **34** documents; **25** automatic and **9** review-only (**73.5%** automatic coverage), **100.0%** automatic critical accuracy, **0** unsafe automatic acceptances, and a **100.0%** safe-outcome rate.
-- Table detection recall: **94.1%**. Row detection: **99.4% precision**, **90.6% recall**, **94.8% F1**, with **1** false extra row across 170 expected rows.
-- Normalized-month accuracy: **85.3%**; baseline and average reported salary: **82.4%** each.
-- Critical fields: balance **79.4%**, deposit fee **91.2%**, and balance fee **94.1%** across all original and augmented records.
-- Text-layer subgroup: **22/25** automatic, **100.0%** automatic critical accuracy, and **100.0%** row precision/recall/F1.
-- Image-only subgroup: **3/9** automatic, **100.0%** automatic critical accuracy, **96.7%** row precision, and **64.4%** row recall. The other six image-only records remain review-only.
-- Augmented-child subgroup: **4/10** automatic, **100.0%** automatic critical accuracy, **97.1%** row precision, and **68.0%** row recall.
-- Machine-readable remaining reasons: `BALANCE_EXTRACTION_FAILED=7` and `TOTAL_RECONCILIATION_FAILED=2`.
+- Supported-new records: **24/30** automatic (**80.0%**) and **6/30** review-only, with **100.0%** automatic critical accuracy, **0** unsafe automatic acceptances, and a **100.0%** safe-outcome rate.
+- The independent-parent headline is **21/21** automatic with **100.0%** critical accuracy and **0** unsafe acceptances. Row precision/recall/F1, baseline, balance, and both fee accuracies are all **100.0%** on this headline set.
+- Table detection recall across supported-new records is **96.7%**. Row detection is **85.3% precision**, **92.7% recall**, and **88.8% F1**, with **24** false-extra rows across 150 expected rows.
+- Normalized-month accuracy is **84.0%**; baseline and average reported salary are **83.3%** each.
+- Critical fields across supported-new parents and augmentations: balance **90.0%**, deposit fee **93.3%**, and balance fee **93.3%**.
+- Annual supported-new subgroup: **20/25** automatic (**80.0%**) with **89.1%** row F1. Quarterly: **4/5** automatic (**80.0%**) with **87.3%** row F1. Both have **100.0%** automatic critical accuracy and **0** unsafe acceptances.
+- Text-layer supported-new subgroup: **22/22** automatic with **100.0%** row F1. Image-only supported-new subgroup: **2/8** automatic (**25.0%**) with **62.4%** row F1. Both have **100.0%** automatic critical accuracy and **0** unsafe acceptances.
+- Supported-new augmentations: **3/9** automatic (**33.3%**) with **100.0%** automatic critical accuracy and **66.0%** row F1. Supported-new independent parents are **21/21** automatic with **100.0%** row F1.
+- Old-pension routing is **4/4** safely unsupported, **0** incorrectly forecast, and **100.0%** safe-routing accuracy. Exact fund classification is **3/4** because one degraded image has no positive recoverable old-pension semantics and therefore correctly remains `unknown`/blocked.
+- Remaining supported-new failure types are exactly `FUND_TYPE_UNKNOWN=5` and `TOTAL_RECONCILIATION_FAILED=1`.
+
+### Statistical interpretation
+
+- Independent automatic supported-new successes/failures: **21/0**; observed automatic critical accuracy: **100.0%**.
+- Exact one-sided 95% Clopper-Pearson lower bound: **86.7%**.
+- A zero-failure sample needs **59** independent successes for a 95% lower bound, so **38** additional zero-failure independent reports are still required.
+- `HIGH`, `MEDIUM`, and `LOW` remain rule/evidence confidence bands. They are not documented as calibrated probabilities.
+- `golden-real-test` remains empty. No production or real-world 95/95 claim is made; a meaningful consented, irreversibly de-identified real-report set is still required.
 
 ### Exact before/after comparison
 
-The saved full-browser baseline at `22a4e8cbd383711987ce3714f20719f3bbd8dd92` covered the then-current 30 records: **11/30** automatic (**36.7%**), **100.0%** automatic critical accuracy, **0** unsafe acceptances, and row precision/recall/F1 of **99.3% / 90.0% / 94.4%**. Engine V2 evaluates 34 records because it adds four controlled robustness augmentations; it reaches **25/34** automatic (**73.5%**) with **100.0%** automatic critical accuracy and **0** unsafe acceptances.
-
-For a like-for-like comparison on the 24 independent parents, coverage improved from **11/24 (45.8%)** to **21/24 (87.5%)** while automatic critical accuracy remained **100.0%**, unsafe acceptances remained **0**, and row precision/recall/F1 remained **100.0% / 100.0% / 100.0%**. Deposit-fee accuracy improved from **70.8%** to **100.0%** and balance-fee accuracy from **58.3%** to **100.0%**.
-
-The requested 95% automatic-coverage target is not safely attainable on the fixed parent set: three old-pension source reports do not print a personal balance-management fee, so a correct engine must send at least **3/24** to review, making **87.5%** the source-constrained ceiling. The augmented robustness set also contains scans where balance labels or complete contribution tuples are no longer legible; automatic completion would require inventing evidence. More representative source examples or explicit user confirmation are required to raise coverage without weakening safety.
+Against the requested starting SHA `2a6f05b8a0d38830da5ecc606dd124b99ba6ebf6`, the fast text parser retains **88.2%** field accuracy, **96.0%** critical-document accuracy, **100.0%** arithmetic-validation accuracy, 120 raw/reliable rows, and **100.0%** independent-parent row/baseline/balance/fee accuracy. The starting revision had no independent `fundType`/routing contract, so the new safety metric correctly reports no eligible automatic new-pension routes there; the worktree reports **21/21** after the routing contract is introduced. This automatic-coverage comparison is a contract change, not evidence that the underlying extraction accuracy changed.
 
 ## Privacy and network verification
 
@@ -84,9 +94,9 @@ The requested 95% automatic-coverage target is not safely attainable on the fixe
 
 ## Remaining failure modes and intentionally deferred scope
 
-- Six of nine image-only records remain review-only. Low-quality scans can erase balance labels, merge contribution columns, or leave a total that cannot be reconciled; the product does not promote these outputs automatically.
+- Six of eight supported-new image-only records remain review-only. Low-quality scans can erase fund/balance labels, merge contribution columns, or leave totals that cannot be reconciled; the product does not promote these outputs automatically.
 - Provider extraction remains conservative and often abstains. Provider is useful metadata and never blocks the forecast.
-- Three independent old-pension reports genuinely omit the personal balance-management fee. This is an absent source value, not a parser defect, and requires review or user confirmation.
+- Old-pension extraction values are not treated as forecast inputs. Positive old-pension evidence routes directly to the unsupported rights-based-model state; insufficient evidence remains unknown and blocked.
 - Flat text without usable geometry is treated as a fallback. Structured table geometry and independent evidence paths are required before automatic acceptance.
 - Cross-browser testing outside Chromium and assistive-technology testing with a screen reader were not performed.
 - PR2 controls—fee, deposit, return and retirement what-if changes, comparisons, Explorer, scenario saving, salary phases and career breaks—are not exposed in this PR1 interface.

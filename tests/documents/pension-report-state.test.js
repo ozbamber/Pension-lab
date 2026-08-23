@@ -135,6 +135,8 @@ test('conflicting rows for the same salary month remain raw and make the month a
 
 function validState(overrides = {}) {
   return {
+    fundType: 'new_pension',
+    supportedForCurrentForecast: true,
     currentBalance: 300000,
     provider: null,
     fees: { depositRate: 0.008, balanceRate: 0.0016 },

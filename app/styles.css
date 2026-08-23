@@ -442,6 +442,40 @@ p { margin-top: 0; }
   font-weight: 700;
 }
 
+.routing-notice {
+  margin: 0 0 24px;
+  padding: 22px;
+  color: var(--ink);
+  background: var(--green-light);
+  border: 1px solid rgba(40, 116, 94, 0.3);
+  border-radius: 16px;
+  line-height: 1.65;
+}
+
+.routing-notice p { margin: 0; white-space: pre-line; }
+
+.fund-type-confirmation {
+  margin-top: 16px;
+  display: grid;
+  gap: 8px;
+  font-weight: 760;
+}
+
+.fund-type-confirmation select {
+  width: min(360px, 100%);
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--white);
+  color: var(--ink);
+  font: inherit;
+}
+
+.primary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .review-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

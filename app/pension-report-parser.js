@@ -665,6 +665,7 @@
       }).sort((left, right) => left.x - right.x);
       return {
         id: `${header.id}-physical-${index}`,
+        sourceRowId: `p${header.page}-y${Math.round(anchor.y)}`,
         page: header.page,
         y: anchor.y,
         tokens,
@@ -802,7 +803,11 @@
     }
     const uniqueRows = [];
     for (const row of output) {
-      if (uniqueRows.some((existing) => existing.salaryMonth === row.salaryMonth && existing.sourcePage === row.sourcePage && sameContributionTuple(existing, row))) continue;
+      const duplicatePhysicalRow = uniqueRows.some((existing) => {
+        const sameSourceRow = existing.evidence?.rowId && row.evidence?.rowId && existing.evidence.rowId === row.evidence.rowId;
+        return existing.salaryMonth === row.salaryMonth && existing.sourcePage === row.sourcePage && sameSourceRow && sameContributionTuple(existing, row);
+      });
+      if (duplicatePhysicalRow) continue;
       uniqueRows.push(row);
     }
     const geometryHeaders = headers.filter((header) => header.geometryAvailable);
@@ -930,7 +935,7 @@
         if (!F.approximatelyEqual(explicitTotal, componentSum, 3, 0.012)) { reliable = false; issues.push('TOTAL_COMPONENT_MISMATCH'); }
       } else {
         totalContribution = componentSum;
-        totalSource = 'components';
+        totalSource = 'derived-from-observed-components';
       }
     } else if (explicitTotal != null && presentComponents.length >= 1) {
       const impliedRemainder = explicitTotal - componentSum;
@@ -971,8 +976,9 @@
       requiresReview: !reliable,
       issues: [...new Set(issues)],
       evidence: {
-        aliasId: 'contribution-table', rowId: row.id, sourcePage: row.page, method,
+        aliasId: 'contribution-table', rowId: row.sourceRowId || row.id, sourcePage: row.page, method,
         rawText: row.directText, headerRowId: header?.id || null, explicitTotal: explicitTotal != null,
+        sourceRow: { id: row.sourceRowId || row.id, page: row.page, y: Number.isFinite(Number(row.y)) ? Number(row.y) : null },
       },
     };
   }
@@ -1021,7 +1027,9 @@
 
       const byEmployer = new Map();
       for (const row of reliableRows) {
-        const key = normalizeSearchText(row.employerName || 'unknown');
+        const employerKey = normalizeSearchText(row.employerName || 'unknown');
+        const depositKey = row.depositDate || 'unknown-date';
+        const key = `${employerKey}|${depositKey}`;
         if (!byEmployer.has(key)) byEmployer.set(key, []);
         byEmployer.get(key).push(row);
       }
@@ -1038,7 +1046,9 @@
           employerRows.forEach((row) => { row.normalizationStatus = 'ambiguous'; row.requiresReview = true; });
         }
       }
-      if (ambiguous || (byEmployer.has('unknown') && reliableRows.length > 1 && byEmployer.size > 1)) {
+      const hasUnknownEmployer = reliableRows.some((row) => !normalizeSearchText(row.employerName || ''));
+      const hasKnownEmployer = reliableRows.some((row) => normalizeSearchText(row.employerName || ''));
+      if (ambiguous || (hasUnknownEmployer && hasKnownEmployer)) {
         issues.push({ code: 'AMBIGUOUS_SALARY_MONTH', salaryMonth, sourceRows: reliableRows.map((row) => row.evidence.rowId) });
         reliableRows.forEach((row) => { row.normalizationStatus = 'ambiguous'; row.requiresReview = true; });
         continue;
@@ -1232,9 +1242,69 @@
   }
 
   function detectReportType(text) {
-    if (/דוח\s*רבעוני|quarterly\s*report/i.test(text)) return 'quarterly';
-    if (/דוח\s*שנתי|annual\s*report/i.test(text)) return 'annual';
+    if (/דוח\s*רבעוני|ינועבר\s*חוד|חוד\s*ינועבר|quarterly\s*report/i.test(text)) return 'quarterly';
+    if (/דוח\s*שנתי|יתנש\s*חוד|חוד\s*יתנש|annual\s*report/i.test(text)) return 'annual';
     return 'unknown';
+  }
+
+  function detectFundType(text, context = {}) {
+    const value = normalizeSearchText(text);
+    const words = value.split(/\s+/).filter(Boolean);
+    const coLocated = (groups, distance = 8) => {
+      const positions = groups.map((aliases) => words.map((word, index) => aliases.some((alias) => word === alias || word.startsWith(alias)) ? index : -1).filter((index) => index >= 0));
+      if (positions.some((items) => !items.length)) return false;
+      const combinations = (groupIndex, selected) => {
+        if (groupIndex === positions.length) return Math.max(...selected) - Math.min(...selected) <= distance;
+        return positions[groupIndex].some((position) => combinations(groupIndex + 1, [...selected, position]));
+      };
+      return combinations(0, []);
+    };
+    const oldSignals = [
+      { id: 'explicit-old-pension-he', pattern: /קרן\s*פנסיה\s*ותיקה|קרן\s*ותיקה|ותיקה\s*שבהסדר/ },
+      { id: 'explicit-old-pension-he-reversed', pattern: /הקיתו\s*היסנפ\s*ןרק|ןרקב?\s*היסנפ\s*הקיתו|הקיתו\s*ןרק|רדסהבש\s*הקיתו/ },
+      { id: 'explicit-old-pension-en', pattern: /veteran\s*pension\s*fund|old\s*pension\s*fund|legacy\s*pension\s*fund/ },
+    ];
+    const newSignals = [
+      { id: 'explicit-new-pension-he', pattern: /קרן\s*פנסיה\s*חדשה|קרן\s*חדשה/ },
+      { id: 'explicit-new-pension-he-reversed', pattern: /השדח\s*היסנפ\s*ןרק|ןרקב?\s*היסנפ\s*השדח|השדח\s*ןרק/ },
+      { id: 'explicit-new-pension-en', pattern: /new\s*pension\s*fund/ },
+    ];
+    const matchedOld = oldSignals.filter((signal) => signal.pattern.test(value)).map((signal) => signal.id);
+    if (coLocated([['קרן', 'בקרן', 'ןרק', 'ןרקב'], ['פנסיה', 'היסנפ'], ['ותיקה', 'הקיתו']])) matchedOld.push('co-located-old-pension-terms');
+    if (matchedOld.length) {
+      return {
+        type: 'old_pension', confidenceBand: 'HIGH', supportedForCurrentForecast: false,
+        reason: 'OLD_PENSION_REQUIRES_RIGHTS_BASED_MODEL', evidence: matchedOld,
+      };
+    }
+    const matchedNew = newSignals.filter((signal) => signal.pattern.test(value)).map((signal) => signal.id);
+    if (coLocated([['קרן', 'בקרן', 'ןרק', 'ןרקב'], ['פנסיה', 'היסנפ'], ['חדשה', 'השדח']])) matchedNew.push('co-located-new-pension-terms');
+    if (matchedNew.length) {
+      return {
+        type: 'new_pension', confidenceBand: 'HIGH', supportedForCurrentForecast: true,
+        reason: 'SUPPORTED_NEW_PENSION', evidence: matchedNew,
+      };
+    }
+    const fields = context.fields || {};
+    const baseline = context.baseline || { derived: {} };
+    const tableExtraction = context.tableExtraction || {};
+    const accumulationSignals = [
+      fields.currentBalance?.confidenceBand === 'HIGH' && 'high-confidence-closing-balance',
+      fields.depositManagementFeeRate?.confidenceBand === 'HIGH' && 'high-confidence-personal-deposit-fee',
+      fields.balanceManagementFeeRate?.confidenceBand === 'HIGH' && 'high-confidence-personal-balance-fee',
+      Number(baseline.derived?.monthsUsed) > 0 && 'reliable-salary-month',
+      (tableExtraction.headers || []).some((header) => Number(header.strength) >= 6) && 'strong-contribution-table-schema',
+    ].filter(Boolean);
+    if (accumulationSignals.length === 5) {
+      return {
+        type: 'new_pension', confidenceBand: 'HIGH', supportedForCurrentForecast: true,
+        reason: 'SUPPORTED_NEW_PENSION', evidence: accumulationSignals,
+      };
+    }
+    return {
+      type: 'unknown', confidenceBand: 'LOW', supportedForCurrentForecast: false,
+      reason: 'FUND_TYPE_CONFIRMATION_REQUIRED', evidence: accumulationSignals,
+    };
   }
 
   function extractReportDate(rows, allText) {
@@ -1287,8 +1357,9 @@
       if (latest.reportedSalary > 0 && latest.severanceContribution != null) fields.latestSeveranceRate = field(latest.severanceContribution / latest.reportedSalary, 'ratio', 'derived', confidence - 0.01, evidence);
     }
 
-    const allText = typeof input === 'string' ? input : String(input?.text || rows.map((row) => row.directText).join('\n'));
+    const allText = typeof input === 'string' ? input : [String(input?.text || ''), rows.map((row) => row.directText).join('\n')].filter(Boolean).join('\n');
     const reportType = detectReportType(allText);
+    const fund = detectFundType(allText, { fields, baseline, tableExtraction });
     const reportDate = extractReportDate(rows, allText);
     if (reportDate) fields.reportDate = field(reportDate.display, 'date', 'direct', reportDate.confidence, { aliasId: 'report-date', page: reportDate.page, rowId: reportDate.rowId, method });
     if (reportDate && fields.currentBalance) fields.balanceDate = field(reportDate.display, 'date', 'derived', Math.min(0.9, reportDate.confidence), { aliasId: 'report-period-end', page: reportDate.page, method });
@@ -1305,8 +1376,15 @@
     if (!tableExtraction.tables.length) reviewIssues.push({ code: 'CONTRIBUTION_TABLE_NOT_FOUND' });
     else if (confidence.components.tableHeaderConfidence !== 'HIGH') reviewIssues.push({ code: 'CONTRIBUTION_HEADER_NOT_RECONSTRUCTED' });
     if (confidence.components.arithmeticConfidence !== 'HIGH') reviewIssues.push({ code: 'CONTRIBUTION_ARITHMETIC_NOT_HIGH' });
-    const automaticAccepted = confidence.overall === 'HIGH' && reviewIssues.length === 0;
+    if (fund.type === 'unknown') reviewIssues.push({ code: 'FUND_TYPE_CONFIRMATION_REQUIRED' });
+    const extractionAutomaticAccepted = confidence.overall === 'HIGH' && reviewIssues.length === 0;
+    const automaticAccepted = fund.type === 'new_pension' && fund.confidenceBand === 'HIGH' && fund.supportedForCurrentForecast && extractionAutomaticAccepted;
+    const routingReasons = fund.type === 'old_pension' ? [fund.reason] : [...new Set(reviewIssues.map((issue) => issue.code))];
+    const requiresReview = fund.type === 'old_pension' ? false : !automaticAccepted;
     const pensionReportState = {
+      fundType: fund.type,
+      supportedForCurrentForecast: fund.supportedForCurrentForecast,
+      routingReason: fund.reason,
       currentBalance: fields.currentBalance?.value ?? null,
       provider: fields.pensionProvider?.value ?? null,
       report: { type: reportType, reportDate: fields.reportDate?.value ?? null, period: fields.balanceDate?.value ?? null },
@@ -1333,21 +1411,27 @@
           monthsAmbiguous: contributionHistory.filter((row) => row.normalizationStatus === 'ambiguous').length,
         },
       },
-      confidence: { ...confidence.components, overall: confidence.overall },
+      confidence: {
+        ...confidence.components,
+        fundTypeConfidence: fund.confidenceBand,
+        overall: automaticAccepted ? 'HIGH' : fund.type === 'old_pension' ? 'HIGH' : confidence.overall,
+        interpretation: 'RULE_CONFIDENCE_NOT_STATISTICALLY_CALIBRATED',
+      },
       decision: {
-        confidenceBand: confidence.overall,
+        confidenceBand: automaticAccepted || fund.type === 'old_pension' ? 'HIGH' : confidence.overall,
         automaticAccepted,
-        requiresReview: !automaticAccepted,
-        reasons: [...new Set(reviewIssues.map((issue) => issue.code))],
+        requiresReview,
+        reasons: routingReasons,
       },
       evidence: {
+        fundType: { signalIds: fund.evidence, confidenceBand: fund.confidenceBand },
         currentBalance: fields.currentBalance?.evidence ?? null,
         provider: fields.pensionProvider?.evidence ?? null,
         reportDate: fields.reportDate?.evidence ?? null,
         depositFee: fields.depositManagementFeeRate?.evidence ?? null,
         balanceFee: fields.balanceManagementFeeRate?.evidence ?? null,
       },
-      review: { requiresReview: !automaticAccepted, issues: reviewIssues },
+      review: { requiresReview, issues: fund.type === 'old_pension' ? [] : reviewIssues },
     };
     return {
       fields,
@@ -1381,6 +1465,8 @@
     aggregateContributionHistory,
     resolveContributionHistories,
     deriveContributionBaseline,
+    detectFundType,
+    detectReportType,
     parsePensionReport,
     parseManagementFeesFromTokens,
     countReportAnchors,

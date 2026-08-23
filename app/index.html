@@ -74,7 +74,19 @@
 
       <div id="reviewWarning" class="review-warning hidden" role="alert"></div>
 
-      <div class="review-grid">
+      <div id="routingNotice" class="routing-notice hidden" role="status">
+        <p id="routingMessage"></p>
+        <label id="fundTypeConfirmationWrap" class="fund-type-confirmation hidden" for="fundTypeConfirmation">
+          <span>כדי להמשיך, אשרו מה כתוב בדוח:</span>
+          <select id="fundTypeConfirmation">
+            <option value="">בחירת סוג הקרן</option>
+            <option value="new_pension">קרן פנסיה חדשה</option>
+            <option value="old_pension">קרן פנסיה ותיקה</option>
+          </select>
+        </label>
+      </div>
+
+      <div id="reviewMetrics" class="review-grid">
         <label class="metric-card balance-card" for="currentBalance">
           <span class="metric-label">יתרה נוכחית <b id="currentBalanceSource" class="source-chip">מהדוח</b></span>
           <span class="money-field"><span>₪</span><input id="currentBalance" type="number" min="0" step="1000" inputmode="numeric" aria-describedby="currentBalanceError" /></span>
@@ -105,7 +117,7 @@
 
       <p id="derivedRates" class="derived-rates hidden"></p>
 
-      <details class="contribution-disclosure">
+      <details id="contributionDisclosure" class="contribution-disclosure">
         <summary><span>פירוט ההפקדות שמצאנו</span><b id="historyCount">0 שורות</b></summary>
         <div id="historyReviewNote" class="history-review-note hidden"></div>
         <div id="contributionHistory" class="contribution-history"></div>

@@ -8,6 +8,17 @@
     "schema_version": { "const": 2 },
     "id": { "type": "string" },
     "document_type": { "enum": ["payslip", "pension_report"] },
+    "fund_type": { "enum": ["new_pension", "old_pension", "unknown"] },
+    "report_type": { "enum": ["annual", "quarterly", "unknown"] },
+    "expectedRouting": {
+      "type": "object",
+      "required": ["supportedForCurrentForecast", "reason"],
+      "properties": {
+        "supportedForCurrentForecast": { "type": "boolean" },
+        "reason": { "enum": ["SUPPORTED_NEW_PENSION", "OLD_PENSION_REQUIRES_RIGHTS_BASED_MODEL", "FUND_TYPE_CONFIRMATION_REQUIRED"] }
+      },
+      "additionalProperties": false
+    },
     "annotation": {
       "type": "object",
       "required": ["annotated_fields", "expected_absent_fields"],
@@ -55,6 +66,9 @@
       "if": { "properties": { "document_type": { "const": "pension_report" } } },
       "then": {
         "required": [
+          "fund_type",
+          "report_type",
+          "expectedRouting",
           "contribution_history",
           "contributionTableGroundTruth",
           "normalizedContributionMonths",

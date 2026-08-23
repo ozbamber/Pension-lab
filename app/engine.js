@@ -309,6 +309,8 @@
 
   function projectBaseline(pensionReportState, yearsUntilRetirement, assumptions = {}) {
     const report = pensionReportState || {};
+    if (report.fundType === 'old_pension') throw new Error('Old pension funds require a rights-based model and cannot use the accumulation forecast');
+    if (report.fundType !== 'new_pension' || report.supportedForCurrentForecast !== true) throw new Error('A confirmed new-pension fund type is required for the accumulation forecast');
     const years = Number(yearsUntilRetirement);
     const monthsUntilRetirement = Math.round(years * 12);
     const currentBalance = report.currentBalance == null ? NaN : Number(report.currentBalance);

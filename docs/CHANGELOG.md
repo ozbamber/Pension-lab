@@ -1,13 +1,23 @@
 # יומן שינויים
 
+## Fund-type routing and source-local extraction safety — 2026-08-23
+
+- Separated `fundType` (`new_pension`, `old_pension`, `unknown`) from `reportType` (`annual`, `quarterly`, `unknown`) and added independent ground truth and expected-routing annotations for all 34 pension reports.
+- Added positive-evidence old-pension detection and a fail-closed Hebrew review route. Old-pension reports never enter the accumulation forecast; unknown reports require explicit user confirmation.
+- Removed cross-month component repair. A numeric component can now come only from the same physical source row; cross-month patterns may affect confidence but cannot create a value.
+- Made cross-pass OCR merging source-row aware, retained distinct employers in the same salary month, and routed conflicting observations to review. Canonical contribution normalization now has one implementation.
+- Added exact one-sided Clopper-Pearson reporting. The current 21 zero-failure supported-new independent parents have 100% observed automatic critical accuracy but only an 86.7% lower bound; 38 additional zero-failure independent reports are required before a 95/95 claim.
+- Added 28 focused fund-routing, zero-fee, cross-month, multi-employer, summary-row, reconciliation, and cross-pass regressions plus browser checks for old/unknown routing.
+- Expanded machine-readable failure diagnostics and kept rule confidence (`HIGH`/`MEDIUM`/`LOW`) explicitly separate from statistically calibrated confidence.
+
 ## Pension Report Extraction Engine V2 — 2026-08-23
 
 - Annotated all 34 pension-report records with direct contribution-table ground truth: 170 monthly rows, explicit annual/YTD exclusions, normalized months, derived baselines, rates, source pages, and intentional nulls.
 - Added a table-first RTL parser with header reconstruction, physical column geometry, split-cell recovery, salary-month/deposit-date separation, arithmetic constraint solving, duplicate/conflict handling, and explicit review states.
 - Added local multi-pass OCR with quality gating, grayscale/contrast preprocessing, table and numeric crops, row-level passes, and cross-path evidence consensus; raw PDF/OCR text remains local and is not persisted.
 - Added four controlled pension-report robustness augmentations spanning 150/200/300 DPI, JPEG, grayscale, blur, noise, rotation, removed text layers, and mixed text/OCR input.
-- Added safety-aware dataset metrics for table/row detection, false extras, per-field accuracy, normalization, derived values, critical automatic acceptance, review rate, unsafe acceptances, report type, text/image path, lineage, and split.
-- Added 24 focused Engine V2 regressions and expanded Dataset v2 contract tests. The independent-parent benchmark now reaches 87.5% automatic coverage, 100% automatic critical accuracy, zero unsafe acceptances, and 100% row precision/recall; three source reports omit a required fee and therefore impose an 87.5% safe coverage ceiling.
+- Added safety-aware dataset metrics for table/row detection, false extras, per-field accuracy, normalization, derived values, critical automatic acceptance, review rate, unsafe acceptances, fund/report type, text/image path, lineage, split, and exact-binomial uncertainty.
+- Added 24 focused Engine V2 regressions and expanded Dataset v2 contract tests. After fund-type separation, the supported-new independent-parent benchmark is 21/21 automatic with 100% critical accuracy, zero unsafe acceptances, and 100% row precision/recall; three old-pension parents are evaluated separately as routing cases.
 
 ## Pension-report-first baseline forecast — 2026-08-23
 

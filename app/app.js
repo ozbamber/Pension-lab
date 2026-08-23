@@ -81,6 +81,9 @@
 
   function emptyReportState() {
     return {
+      fundType: 'unknown',
+      supportedForCurrentForecast: false,
+      routingReason: 'FUND_TYPE_CONFIRMATION_REQUIRED',
       currentBalance: null,
       provider: null,
       report: { type: 'unknown', reportDate: null, period: null },
@@ -208,6 +211,20 @@
 
   function renderReview() {
     if (!pensionReportState) return;
+    const oldPension = pensionReportState.fundType === 'old_pension';
+    const unknownFund = pensionReportState.fundType !== 'new_pension' && !oldPension;
+    const routingMessage = oldPension
+      ? 'הדוח הוא של קרן פנסיה ותיקה.\n\nהחישוב הנוכחי של Pension Lab מיועד לקרן פנסיה חדשה, שבה התחזית מבוססת על יתרה צבורה, הפקדות ותשואה.\n\nבקרן ותיקה הקצבה מחושבת לפי זכויות וכללים אחרים, ולכן לא נציג חישוב שעלול להיות שגוי.'
+      : unknownFund ? 'לא הצלחנו לקבוע בביטחון אם זהו דוח של קרן פנסיה חדשה או ותיקה. לא נריץ תחזית לפני אישור סוג הקרן.' : '';
+    $('routingNotice').classList.toggle('hidden', !routingMessage);
+    $('routingMessage').textContent = routingMessage;
+    $('fundTypeConfirmationWrap').classList.toggle('hidden', !unknownFund);
+    $('fundTypeConfirmation').value = unknownFund ? '' : pensionReportState.fundType;
+    $('reviewMetrics').classList.toggle('hidden', oldPension);
+    $('derivedRates').classList.toggle('routing-hidden', oldPension);
+    $('contributionDisclosure').classList.toggle('hidden', oldPension);
+    $('continueToYears').classList.toggle('hidden', oldPension);
+    $('continueToYears').disabled = unknownFund;
     setInput('currentBalance', pensionReportState.currentBalance);
     setInput('baselineMonthlyContribution', pensionReportState.derived?.baselineMonthlyContribution);
     setInput('averageReportedPensionSalary', pensionReportState.derived?.averageReportedPensionSalary);
@@ -229,7 +246,7 @@
       rates.employerContributionRate == null ? null : `מעסיק כ־${formatPercentRatio(rates.employerContributionRate, 1)}`,
       rates.severanceRate == null ? null : `פיצויים כ־${formatPercentRatio(rates.severanceRate, 2)}`,
     ].filter(Boolean);
-    $('derivedRates').classList.toggle('hidden', !rateParts.length);
+    $('derivedRates').classList.toggle('hidden', !rateParts.length || oldPension);
     $('derivedRates').textContent = rateParts.join(' · ');
 
     const typeLabel = pensionReportState.report?.type === 'annual' ? 'דוח שנתי' : pensionReportState.report?.type === 'quarterly' ? 'דוח רבעוני' : 'דוח פנסיה';
@@ -267,6 +284,10 @@
 
   function validateReview() {
     clearErrors();
+    if (pensionReportState.fundType === 'old_pension' || pensionReportState.supportedForCurrentForecast !== true) {
+      renderReview();
+      return false;
+    }
     commitReviewInputs();
     let valid = true;
     if (pensionReportState.currentBalance == null || pensionReportState.currentBalance < 0) {
@@ -339,6 +360,8 @@
     if (status === 'file-too-large') return 'הקובץ גדול מ־12MB.';
     if (status === 'unsupported-type') return 'כרגע ניתן להעלות דוח פנסיה בפורמט PDF.';
     if (status === 'cancelled') return 'העיבוד בוטל.';
+    if (extraction?.pensionReportState?.fundType === 'old_pension') return 'הדוח זוהה כדוח של קרן פנסיה ותיקה. התחזית הנוכחית אינה מתאימה לו.';
+    if (extraction?.pensionReportState?.fundType === 'unknown') return 'קראנו את הדוח, אבל צריך לאשר אם הקרן חדשה או ותיקה לפני תחזית.';
     const months = Number(extraction?.pensionReportState?.derived?.monthsUsed) || 0;
     return months ? `הדוח נקרא. מצאנו ${months} ${months === 1 ? 'חודש הפקדה' : 'חודשי הפקדה'}.` : 'קראנו את הדוח. יש כמה ערכים שצריך לאשר ידנית.';
   }
@@ -408,6 +431,26 @@
   $('cancelProcessing').addEventListener('click', () => processingController?.abort());
   $('backToUpload').addEventListener('click', () => showStep(1));
   $('continueToYears').addEventListener('click', () => { if (validateReview()) { renderReview(); showStep(3); $('yearsUntilRetirement').focus(); } });
+  $('fundTypeConfirmation').addEventListener('change', () => {
+    if (!pensionReportState) return;
+    const confirmed = $('fundTypeConfirmation').value;
+    if (!['new_pension', 'old_pension'].includes(confirmed)) return;
+    pensionReportState.fundType = confirmed;
+    pensionReportState.supportedForCurrentForecast = confirmed === 'new_pension';
+    pensionReportState.routingReason = confirmed === 'new_pension' ? 'USER_CONFIRMED_NEW_PENSION' : 'OLD_PENSION_REQUIRES_RIGHTS_BASED_MODEL';
+    pensionReportState.confidence = { ...(pensionReportState.confidence || {}), fundTypeConfidence: 'USER_CONFIRMED' };
+    pensionReportState.decision = {
+      ...(pensionReportState.decision || {}),
+      automaticAccepted: false,
+      requiresReview: confirmed === 'new_pension',
+      reasons: confirmed === 'new_pension' ? ['USER_CONFIRMED_FUND_TYPE'] : ['OLD_PENSION_REQUIRES_RIGHTS_BASED_MODEL'],
+    };
+    pensionReportState.review = confirmed === 'new_pension'
+      ? { ...(pensionReportState.review || {}), requiresReview: true }
+      : { requiresReview: false, issues: [] };
+    persistSession();
+    renderReview();
+  });
   $('backToReview').addEventListener('click', () => showStep(2));
   $('calculateForecast').addEventListener('click', () => {
     clearErrors();
