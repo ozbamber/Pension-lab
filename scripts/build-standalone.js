@@ -8,9 +8,7 @@ const outputPath = path.join(distRoot, 'pension-lab-he-standalone.html');
 const scriptNames = [
   'engine.js',
   'financial-normalizer.js',
-  'payslip-parser.js',
   'pension-report-parser.js',
-  'pension-input-reconciler.js',
   'local-document-pipeline.js',
   'document-extraction.js',
   'app.js',

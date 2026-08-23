@@ -57,13 +57,17 @@
       throw new Error('Scenario is missing required fields');
     }
 
-    const currentAge = Number(s.profile.currentAge);
-    const retirementAge = Number(s.retirement.retirementAge);
-    if (!Number.isFinite(currentAge) || !Number.isFinite(retirementAge) || !(retirementAge > currentAge)) {
+    const explicitMonths = Number(s.horizonMonths ?? s.retirement.monthsUntilRetirement);
+    const hasExplicitHorizon = Number.isFinite(explicitMonths) && explicitMonths >= 1;
+    const currentAge = Number.isFinite(Number(s.profile.currentAge)) ? Number(s.profile.currentAge) : 0;
+    const retirementAge = Number.isFinite(Number(s.retirement.retirementAge))
+      ? Number(s.retirement.retirementAge)
+      : currentAge + (hasExplicitHorizon ? Math.round(explicitMonths) / 12 : 0);
+    if (!hasExplicitHorizon && !(Number.isFinite(retirementAge) && retirementAge > currentAge)) {
       throw new Error('Retirement age must be greater than current age');
     }
 
-    const months = Math.max(1, Math.round((retirementAge - currentAge) * 12));
+    const months = hasExplicitHorizon ? Math.round(explicitMonths) : Math.max(1, Math.round((retirementAge - currentAge) * 12));
     const inflationAnnual = Number(s.inflation.annualRate) || 0;
     const monthlyInflation = annualToMonthly(inflationAnnual);
     const baseSalary = Math.max(0, Number(s.profile.monthlySalary) || 0);
@@ -153,7 +157,8 @@
         grossContribution = Math.max(0, pensionableSalary * rate);
       } else {
         const grows = !!s.contribution.fixedGrowsWithSalary;
-        grossContribution = fixedContributionBase * (grows && baseSalary > 0 ? salary / baseSalary : 1);
+        if (s.contribution.fixedValueType === 'real') grossContribution = fixedContributionBase * inflationIndex;
+        else grossContribution = fixedContributionBase * (grows && baseSalary > 0 ? salary / baseSalary : 1);
       }
 
       const depositFeeAmount = grossContribution * depositFee;
@@ -302,6 +307,51 @@
     };
   }
 
+  function projectBaseline(pensionReportState, yearsUntilRetirement, assumptions = {}) {
+    const report = pensionReportState || {};
+    const years = Number(yearsUntilRetirement);
+    const monthsUntilRetirement = Math.round(years * 12);
+    const currentBalance = report.currentBalance == null ? NaN : Number(report.currentBalance);
+    const monthlyContribution = report.derived?.baselineMonthlyContribution == null ? NaN : Number(report.derived.baselineMonthlyContribution);
+    const depositFee = report.fees?.depositRate == null ? NaN : Number(report.fees.depositRate);
+    const balanceFee = report.fees?.balanceRate == null ? NaN : Number(report.fees.balanceRate);
+    if (!Number.isFinite(years) || years <= 0 || monthsUntilRetirement < 1) throw new Error('Years until retirement must be greater than zero');
+    if (!Number.isFinite(currentBalance) || currentBalance < 0) throw new Error('A confirmed current balance is required');
+    if (!Number.isFinite(monthlyContribution) || monthlyContribution < 0) throw new Error('A confirmed monthly pension contribution is required');
+    if (!Number.isFinite(depositFee) || depositFee < 0) throw new Error('A confirmed deposit management fee is required');
+    if (!Number.isFinite(balanceFee) || balanceFee < 0) throw new Error('A confirmed balance management fee is required');
+
+    const inflationRate = Number.isFinite(Number(assumptions.inflationRate)) ? Number(assumptions.inflationRate) : 0.02;
+    const realReturnRate = Number.isFinite(Number(assumptions.realReturnRate)) ? Number(assumptions.realReturnRate) : 0.04;
+    const coefficient = Number.isFinite(Number(assumptions.coefficient)) ? Number(assumptions.coefficient) : 200;
+    const scenario = {
+      horizonMonths: monthsUntilRetirement,
+      profile: { currentAge: 0, currentBalance, monthlySalary: 0, pensionableSalary: 0 },
+      inflation: { annualRate: inflationRate },
+      contribution: { mode: 'fixed', fixedAmount: monthlyContribution, fixedValueType: 'real', fixedGrowsWithSalary: false },
+      fees: { depositFee, annualBalanceFee: balanceFee },
+      retirement: { monthsUntilRetirement, coefficient },
+      salaryPhases: [],
+      returnPhases: [{ id: 'baseline-real-return', startAge: 0, endAge: Math.max(1, years), annualReturn: realReturnRate, returnType: 'real' }],
+      careerBreaks: [],
+      investment: { blendProtected: false },
+    };
+    const projection = project(scenario);
+    return {
+      ...projection,
+      yearsUntilRetirement: years,
+      monthsUntilRetirement,
+      baselineMonthlyContribution: monthlyContribution,
+      assumptions: {
+        realReturnRate,
+        inflationRate,
+        coefficient,
+        contributionValueType: 'real-constant',
+      },
+      scenario,
+    };
+  }
+
   return {
     clamp,
     annualToMonthly,
@@ -312,6 +362,7 @@
     pensionAtCoefficient,
     retirementAgeSeries,
     compareScenarios,
+    projectBaseline,
     cloneScenario,
   };
 });

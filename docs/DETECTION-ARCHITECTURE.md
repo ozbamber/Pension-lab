@@ -2,42 +2,66 @@
 
 ## Scope and privacy boundary
 
-Pension Lab processes documents locally in the browser. PDF text extraction, optional OCR, candidate generation, scoring, and reconciliation run without uploading the file or raw extracted text. Diagnostics contain field names, method, alias identifiers, confidence, origin, and validation state—not source text or financial values.
+Pension Lab's primary PR1 path processes one annual or quarterly pension report locally in the browser. PDF text extraction, optional OCR, normalization, arithmetic validation, and forecast calculation run without uploading the document. The session can retain confirmed normalized values, but it excludes the file, filename, and raw PDF/OCR/contribution-row text.
 
-## Pipeline
+Historical payslip and cross-document reconciliation modules remain isolated for regression coverage. The running application does not load them and the normal pension-report flow does not depend on them.
 
-1. PDF.js extracts token text and page geometry. If the native text layer is unusable for a payslip, locally bundled Tesseract OCR is loaded lazily.
-2. Financial normalization parses currencies, grouping separators, decimal separators, and percentages. OCR repair is conservative: only ambiguous `O/o/I/l/|` characters are repaired when surrounded by sufficient numeric evidence; unrelated letters are not guessed as digits.
-3. Semantic alias groups identify salary, employee, employer, severance, balance, fee, and provider anchors in Hebrew and English.
-4. Tokens are grouped into spatial rows. Every numeric observation receives a stable in-document candidate identity so one observation cannot silently fill multiple roles. Structured tokens and flattened-text fallback tokens are evaluated as separate streams, never as duplicate candidates in one pool.
-5. Every semantic anchor considers a deterministic neighborhood of at most five own/nearby rows even when its own row already contains a number. Candidate eligibility stays spatially broad while geometry affects score. Unary scores combine OCR confidence, format confidence, label proximity, page/row distance, and monthly-versus-annual semantics.
-6. The payslip selector evaluates bounded combinations of salary and contribution candidates. It rewards amount/rate agreement and completeness, rejects reused observations and impossible ratios, and penalizes annual or YTD salary and contribution contexts when a monthly value is required.
-7. Pension-report parsing independently selects the closing balance, personal fee percentages, provider, report date, and contribution rows. Fee selection scores semantic type, spatial distance, and personal-versus-fund-average section context. It never uses a broad first-percentage window rule.
-8. Contribution history is ordered by salary month. Annual/YTD summary rows do not replace monthly deposit rows, and recurring recent rows increase confidence.
-9. Cross-document reconciliation compares independent observations with tolerance, explicit source periods, period reliability, and evidence strength. Agreement raises confidence. Reliable different-month conflicts select the newer observation symmetrically; same-month, missing-date, or unreliable-date ambiguity remains visible unless one source has substantially stronger independent evidence. When the payslip truly lacks a value, a directly observed report value may supply it with its report provenance intact.
+## Report pipeline
 
-## Financial consistency
+1. PDF.js extracts text tokens with page geometry from up to ten pages.
+2. A multi-signal assessment decides whether the native text layer is useful. Image-only reports use locally bundled Tesseract `heb+eng` OCR; incomplete OCR remains reviewable.
+3. Financial normalization handles shekel markers, grouping/decimal punctuation, percentages, signs, and conservative OCR digit repair.
+4. Hebrew and English semantic aliases identify closing balance, personal deposit/balance fees, provider metadata, report date/type, and contribution-table headers.
+5. Tokens are grouped into page rows. Structured geometry associates values with the nearest semantic columns and supports reversed RTL order. Flat text uses header order and arithmetic identities as a conservative fallback.
+6. Annual and quarterly classification is metadata only. Both use the same field and contribution-history model.
+7. The result is an explicit `pensionReportState` containing report metadata, fees, every raw contribution row, reliable normalized salary months, derived means/rates, evidence identifiers, and review issues.
 
-The scorer uses identities rather than fixture values or legal-rate constants:
+## Contribution rows
 
-- `contribution amount / insured salary ≈ contribution rate` when both are printed;
-- contribution amounts must be positive and smaller than the salary;
-- individual and combined ratios must remain within broad mathematical guardrails;
-- a printed total may corroborate, but does not replace, its component observations;
-- mutually exclusive fields cannot reuse the same candidate identity.
+A raw contribution row can preserve:
+
+- employer name;
+- deposit date;
+- salary month;
+- reported pension salary;
+- employee, employer, and severance amounts;
+- explicit or component-derived total contribution;
+- source page, confidence, issues, and compact evidence.
+
+Salary month is required for monthly normalization. Annual, YTD, cumulative, and summary rows are excluded. Dates, balances, management-fee amounts, and report metadata are not reused as monthly contribution values.
+
+## Arithmetic and normalization
+
+- When all three components are present, their sum is the expected monthly total.
+- A printed total is preferred only when it agrees with the components within a small amount/relative tolerance.
+- A plausible printed total can support a row with one missing component, but the missing component remains `null`; it is not invented.
+- A conflicting printed total marks the row for review and excludes it from the baseline.
+- Exact duplicate rows remain in raw history and are canonicalized once for the month.
+- Distinct identified employers can be aggregated for one salary month.
+- Conflicting rows for the same employer—or unidentified conflicting duplicates—mark the month ambiguous; no row is selected silently.
+
+For every reliable normalized month:
+
+`monthlyPensionDeposit = employee + employer + severance`
+
+or the arithmetically consistent explicit total. One reliable month becomes the baseline. With two or more reliable months, `baselineMonthlyContribution` is the arithmetic mean of all reliable monthly totals. `averageReportedPensionSalary` and representative component rates use the same reliable-month set, but they are supporting information rather than the forecast's cash-flow source.
+
+## Forecast gate
+
+The automatic baseline forecast requires confirmed current balance, monthly contribution, deposit fee, balance fee, and years until retirement. A missing provider never blocks calculation. Missing numeric values remain missing and the engine refuses to replace them silently with zero.
+
+`yearsUntilRetirement × 12` determines the horizon exactly. The baseline monthly contribution remains constant in real terms and is converted through the existing inflation machinery for nominal internal cash flows. The existing real-return methodology remains authoritative.
 
 ## Provenance and review
 
-- `direct` — the returned value is a selected document observation.
-- `derived` — the value is calculated from direct observations, such as amount divided by insured salary.
-- Relationship inference influences selection and confidence but does not invent a numeric value. Cross-document evidence is labeled `crossValidated`, `STRONGER_INDEPENDENT_EVIDENCE`, `CHRONOLOGY_RESOLVED`, or `CROSS_DOCUMENT_CONFLICT`.
-- OCR-derived critical values, materially conflicting alternatives, and near-tied salary candidates require user confirmation.
-- Missing fields remain missing; the application does not insert document-derived legal defaults.
+- `direct` values are selected document observations.
+- `derived` values are arithmetic results from direct observations.
+- Evidence stores alias, row, page, method, header association, and explicit-total status.
+- Low-confidence OCR, conflicting totals, ambiguous salary months, and missing critical values remain visible for user review.
+- Provider abstention is allowed; financial evidence is not discarded because provider identification failed.
 
-## Candidate pruning and determinism
+## Regression and benchmark coverage
 
-Each semantic anchor first searches at most five own/nearby spatial rows, then retains only its highest-scoring bounded set of amount and rate candidates. The global evaluator explores the Cartesian product of those bounded sets and sorts deterministically by score and evidence completeness. This keeps browser runtime predictable while preserving genuine alternatives for adversarial layouts.
+Deterministic tests cover annual 12-row and quarterly 3-row reports, quarterly YTD distractors, one/multiple months, mean salary and deposit, non-standard rates, partial components with explicit total, total mismatch, summary exclusion, duplicate/correction ambiguity, missing provider/fees/balance, report-only completion, absence of age fields, and exact forecast horizon.
 
-## Regression coverage
-
-Synthetic tests cover a misleading `925` on the salary-anchor row with the true salary on a separate adjacent row, split-row contribution amount/rate pairs, monthly versus annual/YTD salary and contribution candidates, full contribution tuples, impossible relationships, ambiguous salaries, missing amounts or rates, amount/rate conflicts, conservative OCR corruption (`23,5OO`, `1,64S`, `1,64O`), annual/YTD report rows, fee-average confusion, symmetric cross-document chronology, same-month conflict, and report-only supply of a genuinely missing payslip amount.
+Dataset v2 reports field, critical-document, annual/quarterly, and text-layer/image-only metrics separately. Its current ground truth does not annotate full contribution histories, so history field accuracy is reported as unavailable; raw-row and normalized-month counts are reported without pretending they are accuracy.

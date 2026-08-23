@@ -28,6 +28,7 @@ const projectRoot = path.resolve(__dirname, '..', '..');
 const dataset = loadDataset(projectRoot);
 const parsers = loadParsers(projectRoot);
 const predictions = [];
+const pensionStates = new Map();
 let eligible = 0;
 for (const record of dataset.records) {
   if (!record.has_text_layer) continue;
@@ -38,6 +39,7 @@ for (const record of dataset.records) {
   const parsed = record.document_type === 'payslip'
     ? parsers.payslip.parsePayslip(text, { method: 'pdf-text' })
     : parsers.pension.parsePensionReport(text, { method: 'pdf-text' });
+  if (record.document_type === 'pension_report') pensionStates.set(record.id, parsed.pensionReportState || null);
   predictions.push({ id: record.id, fields: parserFields(parsed) });
 }
 
@@ -52,6 +54,44 @@ console.log('By family:');
 for (const [family, metrics] of Object.entries(result.groups.family)) {
   console.log(`  ${family}: fields=${pct(metrics.field_accuracy)}, critical=${pct(metrics.critical_document_accuracy)}, n=${metrics.documents}`);
 }
+
+function aggregateDocuments(documents) {
+  const fields = documents.flatMap((document) => document.fields);
+  return {
+    documents: documents.length,
+    fieldAccuracy: fields.length ? fields.filter((field) => field.pass).length / fields.length : null,
+    criticalAccuracy: documents.length ? documents.filter((document) => document.critical_document_pass).length / documents.length : null,
+    extractionCoverage: documents.length ? documents.filter((document) => document.has_prediction).length / documents.length : null,
+  };
+}
+
+const pensionMetrics = result.groups.document_type.pension_report;
+const pensionDocuments = result.documents.filter((document) => document.document_type === 'pension_report');
+const annualMetrics = aggregateDocuments(pensionDocuments.filter((document) => document.family !== 'quarterly'));
+const quarterlyMetrics = aggregateDocuments(pensionDocuments.filter((document) => document.family === 'quarterly'));
+const pensionRecords = dataset.records.filter((record) => record.document_type === 'pension_report');
+const annotatedHistoryRecords = pensionRecords.filter((record) => {
+  const groundTruth = dataset.groundTruth.get(record.id);
+  return Array.isArray(groundTruth?.contribution_history) && groundTruth.contribution_history.length > 0 &&
+    (groundTruth.annotation?.annotated_fields || []).some((field) => field.startsWith('contribution_history'));
+});
+const extractedRows = [...pensionStates.values()].reduce((sum, state) => sum + (state?.contributionHistory?.length || 0), 0);
+const reliableMonths = [...pensionStates.values()].reduce((sum, state) => sum + (state?.derived?.monthsUsed || 0), 0);
+
+console.log('Pension reports only:');
+console.log(`  Documents: ${pensionMetrics.documents}`);
+console.log(`  Field accuracy: ${pct(pensionMetrics.field_accuracy)}`);
+console.log(`  Critical-document accuracy: ${pct(pensionMetrics.critical_document_accuracy)}`);
+console.log(`  Extraction coverage: ${pensionMetrics.predictions}/${pensionMetrics.documents} (${pct(pensionMetrics.predictions / pensionMetrics.documents)})`);
+console.log(`  Validation: ${pensionMetrics.validation_checks_passed}/${pensionMetrics.validation_checks_run}; coverage=${pct(pensionMetrics.validation_coverage)}`);
+console.log(`  Annual: fields=${pct(annualMetrics.fieldAccuracy)}, critical=${pct(annualMetrics.criticalAccuracy)}, coverage=${pct(annualMetrics.extractionCoverage)}, n=${annualMetrics.documents}`);
+console.log(`  Quarterly: fields=${pct(quarterlyMetrics.fieldAccuracy)}, critical=${pct(quarterlyMetrics.criticalAccuracy)}, coverage=${pct(quarterlyMetrics.extractionCoverage)}, n=${quarterlyMetrics.documents}`);
+console.log(`  Text-layer: fields=${pct(pensionMetrics.field_accuracy)}, critical=${pct(pensionMetrics.critical_document_accuracy)}, n=${pensionMetrics.documents}`);
+console.log('  Image-only: n/a in the text-layer benchmark (run dataset:benchmark:browser).');
+console.log('Contribution-history metrics:');
+console.log(`  Extracted raw rows: ${extractedRows}; reliable normalized months: ${reliableMonths}.`);
+console.log(`  Dataset v2 annotated history coverage: ${annotatedHistoryRecords.length}/${pensionRecords.length} pension reports.`);
+console.log('  Monthly-row, salary-month, component-amount, total and baseline accuracy: n/a until contribution_history ground truth is annotated; missing values are not scored as zero.');
 
 const outIndex = process.argv.indexOf('--json-out');
 if (outIndex >= 0 && process.argv[outIndex + 1]) {

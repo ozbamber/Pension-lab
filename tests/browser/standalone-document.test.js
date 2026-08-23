@@ -11,8 +11,8 @@ if (typeof WebSocket === 'undefined' || typeof fetch === 'undefined') {
 
 const projectRoot = path.resolve(__dirname, '..', '..');
 const distRoot = path.join(projectRoot, 'dist');
-const nativeFixture = path.join(projectRoot, 'tests', 'fixtures', 'payslips', 'synthetic-native-text-payslip.pdf');
-const scannedFixture = path.join(projectRoot, 'tests', 'fixtures', 'payslips', 'synthetic-scanned-payslip.pdf');
+const nativeFixture = path.join(projectRoot, 'dataset', 'documents', 'pension_report', 'high', 'pension-report-03-fee_heavy.pdf');
+const scannedFixture = path.join(projectRoot, 'dataset', 'documents', 'pension_report', 'degraded', 'degraded-10-pension-report-04-history_dense.pdf');
 const requiredVendorPaths = [
   '/vendor/pdfjs/pdf.min.mjs',
   '/vendor/pdfjs/pdf.worker.min.mjs',
@@ -192,7 +192,7 @@ function assert(condition, message) {
     await cdp.command('Runtime.enable');
     await cdp.command('DOM.enable');
     await cdp.command('Network.enable');
-    await waitFor(() => evaluate(cdp, 'document.readyState === "complete" && Boolean(window.PensionLabTest) && Boolean(document.querySelector("#salarySlipFile"))'), 20000, 'standalone application load');
+    await waitFor(() => evaluate(cdp, 'document.readyState === "complete" && Boolean(window.PensionLabTest) && Boolean(document.querySelector("#pensionReportFile"))'), 20000, 'standalone application load');
 
     const root = await evaluate(cdp, 'window.PensionLocalDocuments.assetRoot().href');
     assert(root === `${origin}/`, `Standalone asset root is incorrect: ${root}`);
@@ -203,24 +203,25 @@ function assert(condition, message) {
     assert(vendorResults.every((item) => item.ok), `Required vendor assets did not resolve: ${JSON.stringify(vendorResults)}`);
     console.log(`✓ all ${requiredVendorPaths.length} standalone vendor URLs resolved from dist/vendor`);
 
-    await setFile(cdp, '#salarySlipFile', nativeFixture);
+    await setFile(cdp, '#pensionReportFile', nativeFixture);
     await waitFor(async () => {
-      const document = await evaluate(cdp, 'window.PensionLabTest.getSelectedDocument("payslip")');
+      const document = await evaluate(cdp, 'window.PensionLabTest.getSelectedDocument("pensionReport")');
       return document && document.method === 'pdf-text';
     }, 30000, 'standalone native PDF extraction');
-    const nativeDocument = await evaluate(cdp, 'window.PensionLabTest.getSelectedDocument("payslip")');
-    assert(nativeDocument.fields.insuredSalary.value === 23500, `Standalone native salary mismatch: ${JSON.stringify(nativeDocument.fields)}`);
-    console.log('✓ standalone native PDF extracted salary 23,500 through PDF.js');
+    const nativeDocument = await evaluate(cdp, 'window.PensionLabTest.getSelectedDocument("pensionReport")');
+    assert(nativeDocument.pensionReportState.currentBalance === 340842, `Standalone native balance mismatch: ${JSON.stringify(nativeDocument.fields)}`);
+    assert(nativeDocument.pensionReportState.derived.monthsUsed === 5, `Standalone native history mismatch: ${JSON.stringify(nativeDocument.pensionReportState.derived)}`);
+    console.log('✓ standalone native PDF extracted balance and five contribution months through PDF.js');
 
-    await evaluate(cdp, 'document.getElementById("salarySlipFile").value = ""');
-    await setFile(cdp, '#salarySlipFile', scannedFixture);
+    await evaluate(cdp, 'document.getElementById("pensionReportFile").value = ""');
+    await setFile(cdp, '#pensionReportFile', scannedFixture);
     await waitFor(async () => {
-      const document = await evaluate(cdp, 'window.PensionLabTest.getSelectedDocument("payslip")');
+      const document = await evaluate(cdp, 'window.PensionLabTest.getSelectedDocument("pensionReport")');
       return document && document.method === 'ocr';
     }, 180000, 'standalone scanned PDF extraction');
-    const scannedDocument = await evaluate(cdp, 'window.PensionLabTest.getSelectedDocument("payslip")');
-    assert(scannedDocument.fields.insuredSalary.value === 23500, `Standalone OCR salary mismatch: ${JSON.stringify(scannedDocument.fields)}`);
-    console.log('✓ standalone scanned PDF extracted salary 23,500 with local heb+eng OCR');
+    const scannedDocument = await evaluate(cdp, 'window.PensionLabTest.getSelectedDocument("pensionReport")');
+    assert(scannedDocument.pensionReportState.derived.monthsUsed >= 1, `Standalone OCR did not retain a reliable contribution month: ${JSON.stringify(scannedDocument.pensionReportState)}`);
+    console.log('✓ standalone scanned pension report reached report review with local heb+eng OCR');
 
     const missing = requests.filter((request) => request.status === 404);
     const legacy = requests.filter((request) => request.url.includes('/pension-lab-he/'));

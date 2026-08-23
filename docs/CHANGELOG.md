@@ -1,5 +1,18 @@
 # יומן שינויים
 
+## Pension-report-first baseline forecast — 2026-08-23
+
+- Replaced the primary journey with one annual-or-quarterly pension-report upload, concise extracted-state review, one `yearsUntilRetirement` input, and one baseline forecast.
+- Removed the payslip upload, payslip progress, cross-document reconciliation, birth year, current age, retirement age, salary/rate requirements, scenario comparison, Explorer, and advanced what-if controls from the running PR1 interface.
+- Added an explicit `pensionReportState` with report metadata, fees, complete raw contribution history, normalized reliable months, derived means/rates, evidence, and review issues.
+- Added semantic and geometric contribution-table extraction for RTL/reversed order, explicit-total arithmetic, partial components, YTD exclusion, duplicate preservation, multi-employer aggregation, and ambiguous-month exclusion.
+- Changed the forecast's recurring input from salary multiplied by rates to the mean of all reliable normalized monthly pension deposits; reported pension salary and implied rates remain supporting information.
+- Added an exact-month baseline engine entry point driven by `yearsUntilRetirement`; contributions remain constant in real terms through the existing inflation and real-return machinery.
+- Missing balance or fee values now require explicit review; a missing provider never blocks the forecast and no absent numeric value is converted silently to zero.
+- Extended local OCR to pension reports, removed the running report parser's dependency on the payslip parser, and stripped raw contribution-row text before session persistence.
+- Added 14 pension-report-state acceptance tests and rewrote responsive smoke, OCR/privacy, and standalone browser suites around the report-only flow.
+- Added pension-only text/browser metrics, annual-versus-quarterly and text-layer-versus-image-only reporting, and an exact parser comparison against a Git ref. Dataset v2 currently has no annotated full contribution histories, so history accuracy is reported as unavailable rather than treating missing annotations as zero.
+
 ## Payslip period candidate detection — 2026-08-20
 
 - Replaced first-match payslip month extraction with candidate generation and semantic/spatial scoring across all MM/YYYY values.

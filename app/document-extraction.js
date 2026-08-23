@@ -159,6 +159,8 @@
       diagnostics: metadata.diagnostics || [],
       pageCount: metadata.pageCount || null,
       contributionHistory: metadata.contributionHistory || [],
+      normalizedContributionMonths: metadata.normalizedContributionMonths || [],
+      pensionReportState: metadata.pensionReportState || null,
       classification: metadata.classification || null,
     };
   }
@@ -188,10 +190,7 @@
       }
 
       if (kind === SOURCES.PENSION_REPORT) {
-        const reportText = root.PensionPayslipParser
-          ? root.PensionPayslipParser.buildRows(root.PensionPayslipParser.tokensFromInput(nativeResult)).map((row) => row.directText).join('\n')
-          : nativeResult.text;
-        const parsed = assessment.useful && root.PensionReportParser ? root.PensionReportParser.parsePensionReport(reportText, { method: 'pdf-text' }) : null;
+        const parsed = assessment.useful && root.PensionReportParser ? root.PensionReportParser.parsePensionReport(nativeResult, { method: 'pdf-text' }) : null;
         if (parsed) {
           const tokenFees = root.PensionReportParser.parseManagementFeesFromTokens(nativeResult);
           Object.entries(tokenFees).forEach(([name, item]) => {
@@ -199,13 +198,18 @@
           });
         }
         const fields = parsed ? wrapPensionReportFields(parsed, file.name) : (assessment.useful ? parsePensionReport(nativeResult.text, file.name) : emptyExtraction(kind));
-        return result(identifiedCount(fields) ? 'partial' : 'manual-required', kind, fields, file.name, {
-          method: 'pdf-text', reason: assessment.reason, pageCount: pdf.numPages,
-          contributionHistory: parsed?.contributionHistory || [], classification: parsed?.classification || null,
-        });
+        if (identifiedCount(fields)) {
+          return result('partial', kind, fields, file.name, {
+            method: 'pdf-text', reason: assessment.reason, pageCount: pdf.numPages,
+            contributionHistory: parsed?.contributionHistory || [],
+            normalizedContributionMonths: parsed?.normalizedContributionMonths || [],
+            pensionReportState: parsed?.pensionReportState || null,
+            classification: parsed?.classification || null,
+          });
+        }
       }
 
-      {
+      if (kind === SOURCES.PAYSLIP) {
         let parsed = parsePayslipInput(nativeResult, 'pdf-text', file.name);
         if (!parsed?.fields?.insuredSalary?.value) {
           const tokenSequence = nativeResult.pages.flatMap((page) => page.tokens.map((token) => token.text)).join('\n');
@@ -234,8 +238,8 @@
             L.releaseCanvas(canvas);
           }
           const current = { pages: ocrPages, text: ocrPages.map((page) => page.text).join('\n') };
-          const parsed = parsePayslipInput(current, 'ocr', file.name);
-          if (parsed && parsed.hasCriticalFields) {
+          const parsed = kind === SOURCES.PAYSLIP ? parsePayslipInput(current, 'ocr', file.name) : null;
+          if (kind === SOURCES.PAYSLIP && parsed && parsed.hasCriticalFields) {
             return result('partial', kind, parsed.fields, file.name, {
               method: 'ocr', reason: assessment.reason, diagnostics: parsed.diagnostics, pageCount: pdf.numPages,
             });
@@ -243,6 +247,27 @@
         }
       } finally {
         await ocr.terminate();
+      }
+      if (kind === SOURCES.PENSION_REPORT && root.PensionReportParser) {
+        const ocrInput = { pages: ocrPages, text: ocrPages.map((page) => page.text).join('\n') };
+        const parsed = root.PensionReportParser.parsePensionReport(ocrInput, { method: 'ocr' });
+        const fields = wrapPensionReportFields(parsed, file.name);
+        if (identifiedCount(fields)) {
+          return result('partial', kind, fields, file.name, {
+            method: 'ocr', reason: assessment.reason, pageCount: pdf.numPages,
+            contributionHistory: parsed.contributionHistory || [],
+            normalizedContributionMonths: parsed.normalizedContributionMonths || [],
+            pensionReportState: parsed.pensionReportState || null,
+            classification: parsed.classification || null,
+          });
+        }
+        return result(pdf.numPages > maxPages ? 'page-limit' : 'manual-required', kind, fields, file.name, {
+          method: 'ocr', reason: assessment.reason, pageCount: pdf.numPages,
+          contributionHistory: parsed.contributionHistory || [],
+          normalizedContributionMonths: parsed.normalizedContributionMonths || [],
+          pensionReportState: parsed.pensionReportState || null,
+          classification: parsed.classification || null,
+        });
       }
       const finalParsed = parsePayslipInput({ pages: ocrPages, text: ocrPages.map((page) => page.text).join('\n') }, 'ocr', file.name);
       if (finalParsed && identifiedCount(finalParsed.fields)) {
@@ -268,8 +293,15 @@
     if (text.length < 20) return result('no-useful-text', kind, emptyExtraction(kind), file.name, { method: 'pdf-text', reason: 'too-little-text' });
     if (looksLikeWrongDocument(text, kind)) return result('wrong-document', kind, emptyExtraction(kind), file.name, { method: 'pdf-text', reason: 'document-signals-mismatch' });
     if (kind === SOURCES.PENSION_REPORT) {
-      const fields = parsePensionReport(text, file.name);
-      return result(identifiedCount(fields) ? 'partial' : 'manual-required', kind, fields, file.name, { method: 'pdf-text', reason: 'legacy-text-layer' });
+      const parsed = root.PensionReportParser ? root.PensionReportParser.parsePensionReport(text, { method: 'pdf-text' }) : null;
+      const fields = parsed ? wrapPensionReportFields(parsed, file.name) : parsePensionReport(text, file.name);
+      return result(identifiedCount(fields) ? 'partial' : 'manual-required', kind, fields, file.name, {
+        method: 'pdf-text', reason: 'legacy-text-layer',
+        contributionHistory: parsed?.contributionHistory || [],
+        normalizedContributionMonths: parsed?.normalizedContributionMonths || [],
+        pensionReportState: parsed?.pensionReportState || null,
+        classification: parsed?.classification || null,
+      });
     }
     const parsed = parsePayslipInput(text, 'pdf-text', file.name);
     const fields = parsed ? parsed.fields : emptyExtraction(kind);

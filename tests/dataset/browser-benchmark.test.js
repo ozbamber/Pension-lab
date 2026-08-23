@@ -122,14 +122,21 @@ async function setFile(cdp, selector, filePath) {
   await cdp.command('DOM.setFileInputFiles', { nodeId: selected.nodeId, files: [filePath] });
 }
 
-function selectedKind(record) { return record.document_type === 'payslip' ? 'payslip' : 'pensionReport'; }
-function selector(record) { return record.document_type === 'payslip' ? '#salarySlipFile' : '#pensionReportFile'; }
 function pct(value) { return value == null ? 'n/a' : `${(value * 100).toFixed(1)}%`; }
+
+function aggregateDocuments(documents) {
+  const fields = documents.flatMap((document) => document.fields);
+  return {
+    documents: documents.length,
+    fieldAccuracy: fields.length ? fields.filter((field) => field.pass).length / fields.length : null,
+    criticalAccuracy: documents.length ? documents.filter((document) => document.critical_document_pass).length / documents.length : null,
+  };
+}
 
 (async () => {
   const splitArg = process.argv.indexOf('--split');
   const split = splitArg >= 0 ? process.argv[splitArg + 1] : 'all';
-  const records = dataset.records.filter((record) => split === 'all' || record.split === split);
+  const records = dataset.records.filter((record) => record.document_type === 'pension_report' && (split === 'all' || record.split === split));
   const { server, port, requests } = await startServer();
   const devToolsPort = await freePort();
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'pension-lab-dataset-chrome-'));
@@ -155,15 +162,19 @@ function pct(value) { return value == null ? 'n/a' : `${(value * 100).toFixed(1)
       await cdp.command('Page.navigate', { url: `http://127.0.0.1:${port}/` });
       await waitFor(() => evaluate(cdp, 'document.readyState === "complete" && Boolean(window.PensionLabTest)'), 20000, 'application load');
       const absolute = path.join(projectRoot, record.path);
-      await setFile(cdp, selector(record), absolute);
-      const kind = selectedKind(record);
-      const timeout = record.document_type === 'payslip' && !record.has_text_layer ? 180000 : 45000;
+      await setFile(cdp, '#pensionReportFile', absolute);
+      const kind = 'pensionReport';
+      const timeout = record.has_text_layer ? 60000 : 180000;
       await waitFor(async () => Boolean(await evaluate(cdp, `window.PensionLabTest.getSelectedDocument(${JSON.stringify(kind)})`)), timeout, `${record.id} extraction`);
-      if (record.document_type === 'payslip') {
-        await waitFor(async () => !(await evaluate(cdp, 'window.PensionLabTest.isPayslipProcessing()')), timeout, `${record.id} processing completion`);
-      }
+      await waitFor(async () => !(await evaluate(cdp, 'window.PensionLabTest.isReportProcessing()')), timeout, `${record.id} processing completion`);
       const extraction = await evaluate(cdp, `window.PensionLabTest.getSelectedDocument(${JSON.stringify(kind)})`);
-      predictions.push({ id: record.id, fields: extraction?.fields || {}, status: extraction?.status || null, method: extraction?.method || null });
+      predictions.push({
+        id: record.id,
+        fields: extraction?.fields || {},
+        pensionReportState: extraction?.pensionReportState || null,
+        status: extraction?.status || null,
+        method: extraction?.method || null,
+      });
       console.log(`[${index + 1}/${records.length}] ${record.id} ${record.family}: ${extraction?.status || 'unknown'} / ${extraction?.method || 'unknown'}`);
     }
 
@@ -174,15 +185,31 @@ function pct(value) { return value == null ? 'n/a' : `${(value * 100).toFixed(1)
     if (missing.length) throw new Error(`Dataset benchmark produced 404 requests: ${JSON.stringify(missing.slice(0, 10))}`);
     if (browserErrors.length) throw new Error(`Dataset benchmark browser errors: ${JSON.stringify(browserErrors.slice(0, 5))}`);
 
-    const metrics = evaluatePredictions(projectRoot, predictions, { split, profile: 'core' });
-    const output = path.join(projectRoot, 'dataset', 'evaluation', `browser-${split}.json`);
-    fs.mkdirSync(path.dirname(output), { recursive: true });
-    fs.writeFileSync(output, `${JSON.stringify({ metrics, predictions }, null, 2)}\n`);
-    console.log(`Field accuracy: ${pct(metrics.summary.field_accuracy)}`);
-    console.log(`Critical-document accuracy: ${pct(metrics.summary.critical_document_accuracy)}`);
-    console.log(`Validation accuracy: ${pct(metrics.summary.validation_accuracy)}`);
-    console.log(`Validation checks: ${metrics.summary.validation_checks_passed}/${metrics.summary.validation_checks_run} passed; ${metrics.summary.validation_checks_run}/${metrics.summary.validation_checks_possible} run; coverage=${pct(metrics.summary.validation_coverage)}`);
-    console.log(`Wrote ${output}`);
+    const metrics = evaluatePredictions(projectRoot, predictions, { split, profile: 'core', documentType: 'pension_report' });
+    const annual = aggregateDocuments(metrics.documents.filter((document) => document.family !== 'quarterly'));
+    const quarterly = aggregateDocuments(metrics.documents.filter((document) => document.family === 'quarterly'));
+    const extractedRows = predictions.reduce((sum, prediction) => sum + (prediction.pensionReportState?.contributionHistory?.length || 0), 0);
+    const reliableMonths = predictions.reduce((sum, prediction) => sum + (prediction.pensionReportState?.derived?.monthsUsed || 0), 0);
+    console.log('Pension-report-only browser benchmark:');
+    console.log(`  Field accuracy: ${pct(metrics.summary.field_accuracy)}`);
+    console.log(`  Critical-document accuracy: ${pct(metrics.summary.critical_document_accuracy)}`);
+    console.log(`  Extraction coverage: ${metrics.summary.predictions}/${metrics.summary.documents} (${pct(metrics.summary.predictions / metrics.summary.documents)})`);
+    console.log(`  Validation accuracy: ${pct(metrics.summary.validation_accuracy)}`);
+    console.log(`  Validation checks: ${metrics.summary.validation_checks_passed}/${metrics.summary.validation_checks_run} passed; ${metrics.summary.validation_checks_run}/${metrics.summary.validation_checks_possible} run; coverage=${pct(metrics.summary.validation_coverage)}`);
+    console.log(`  Annual: fields=${pct(annual.fieldAccuracy)}, critical=${pct(annual.criticalAccuracy)}, n=${annual.documents}`);
+    console.log(`  Quarterly: fields=${pct(quarterly.fieldAccuracy)}, critical=${pct(quarterly.criticalAccuracy)}, n=${quarterly.documents}`);
+    for (const [layer, group] of Object.entries(metrics.groups.text_layer)) {
+      console.log(`  ${layer}: fields=${pct(group.field_accuracy)}, critical=${pct(group.critical_document_accuracy)}, coverage=${pct(group.predictions / group.documents)}, n=${group.documents}`);
+    }
+    console.log(`  Contribution history: ${extractedRows} raw rows; ${reliableMonths} reliable normalized months.`);
+    console.log('  History field accuracy: n/a because Dataset v2 has no annotated contribution_history rows; missing values are not scored as zero.');
+    const outputArg = process.argv.indexOf('--json-out');
+    if (outputArg >= 0 && process.argv[outputArg + 1]) {
+      const output = path.resolve(process.cwd(), process.argv[outputArg + 1]);
+      fs.mkdirSync(path.dirname(output), { recursive: true });
+      fs.writeFileSync(output, `${JSON.stringify({ metrics, predictions }, null, 2)}\n`);
+      console.log(`Wrote ${output}`);
+    }
   } finally {
     if (cdp) cdp.close();
     chrome.kill();

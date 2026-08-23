@@ -388,7 +388,10 @@ function evaluatePredictions(projectRoot, predictionLines, options = {}) {
   const split = options.split || 'all';
   const profile = options.profile || 'core';
   const predictions = new Map(predictionLines.map((line) => [line.id, line]));
-  const selected = dataset.records.filter((record) => (split === 'all' || record.split === split) && (!options.textLayerOnly || record.has_text_layer));
+  const selected = dataset.records.filter((record) =>
+    (split === 'all' || record.split === split) &&
+    (!options.textLayerOnly || record.has_text_layer) &&
+    (!options.documentType || record.document_type === options.documentType));
   const perDocument = [];
   let fieldCorrect = 0;
   let fieldTotal = 0;

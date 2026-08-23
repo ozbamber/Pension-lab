@@ -9,7 +9,7 @@
     "test:engine": "node tests/engine/engine.test.js",
     "test:documents": "node tests/documents/document-extraction.test.js",
     "test:ocr": "node tests/documents/ocr-parser.test.js",
-    "test:pension": "node tests/documents/pension-report.test.js",
+    "test:pension": "node tests/documents/pension-report.test.js && node tests/documents/pension-report-state.test.js",
     "test:browser:ocr": "node tests/browser/ocr-browser.test.js",
     "test:browser:standalone": "npm run build && node tests/browser/standalone-document.test.js",
     "test:browser:smoke": "node tests/browser/browser-smoke.js",
@@ -17,6 +17,7 @@
     "dataset:validate": "node scripts/dataset/validate-dataset.js",
     "dataset:evaluate": "node scripts/dataset/evaluate-predictions.js",
     "dataset:benchmark:text": "node scripts/dataset/evaluate-parser-text.js",
+    "dataset:benchmark:compare": "node scripts/dataset/compare-pension-parser.js",
     "dataset:benchmark:browser": "node tests/dataset/browser-benchmark.test.js",
     "test:core": "npm run test:engine && npm run test:documents && npm run test:ocr && npm run test:pension"
   }
