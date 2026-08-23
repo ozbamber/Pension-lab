@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const { execFileSync } = require('child_process');
-const { loadDataset, evaluatePredictions } = require('./lib/dataset-core');
+const { loadDataset, evaluatePredictions, evaluatePensionReportExtraction } = require('./lib/dataset-core');
 
 const projectRoot = path.resolve(__dirname, '..', '..');
 const dataset = loadDataset(projectRoot);
@@ -37,10 +37,11 @@ function evaluate(ref) {
     const parsed = parser.parsePensionReport(text, { method: 'pdf-text' });
     rawRows += parsed.contributionHistory?.length || 0;
     normalizedMonths += parsed.pensionReportState?.derived?.monthsUsed || 0;
-    predictions.push({ id: record.id, fields: parsed.fields || {} });
+    predictions.push({ id: record.id, fields: parsed.fields || {}, pensionReportState: parsed.pensionReportState || null, method: parsed.method || 'pdf-text' });
   }
   const metrics = evaluatePredictions(projectRoot, predictions, { profile: 'core', textLayerOnly: true, documentType: 'pension_report' });
-  return { metrics, rawRows, normalizedMonths };
+  const extraction = evaluatePensionReportExtraction(projectRoot, predictions, { textLayerOnly: true });
+  return { metrics, extraction, rawRows, normalizedMonths };
 }
 
 function pct(value) { return value == null ? 'n/a' : `${(value * 100).toFixed(1)}%`; }
@@ -68,3 +69,7 @@ console.log(`  Validation accuracy: ${pct(before.metrics.summary.validation_accu
 console.log(`  Annual: fields ${pct(beforeAnnual.fields)} -> ${pct(afterAnnual.fields)}; critical ${pct(beforeAnnual.critical)} -> ${pct(afterAnnual.critical)}; n=${afterAnnual.documents}`);
 console.log(`  Quarterly: fields ${pct(beforeQuarterly.fields)} -> ${pct(afterQuarterly.fields)}; critical ${pct(beforeQuarterly.critical)} -> ${pct(afterQuarterly.critical)}; n=${afterQuarterly.documents}`);
 console.log(`  Raw contribution rows: ${before.rawRows} -> ${after.rawRows}; reliable normalized months: ${before.normalizedMonths || 'n/a'} -> ${after.normalizedMonths}.`);
+for (const [label, result] of [['BEFORE', before], ['AFTER', after]]) {
+  const summary = result.extraction.headlineSummary || result.extraction.summary;
+  console.log(`  ${label} safety-aware parents: documents=${summary.documents}; automatic=${summary.automaticDocuments}; review=${summary.reviewDocuments}; coverage=${pct(summary.automaticCoverage)}; automatic critical=${pct(summary.automaticCriticalAccuracy)}; unsafe=${summary.unsafeWrongAcceptances}; rows P/R/F1=${pct(summary.rowDetection.precision)}/${pct(summary.rowDetection.recall)}/${pct(summary.rowDetection.f1)}; baseline=${pct(summary.derived.baselineMonthlyContributionAccuracy)}; balance=${pct(summary.criticalFields.currentBalanceAccuracy)}; deposit fee=${pct(summary.criticalFields.depositManagementFeeAccuracy)}; balance fee=${pct(summary.criticalFields.balanceManagementFeeAccuracy)}.`);
+}

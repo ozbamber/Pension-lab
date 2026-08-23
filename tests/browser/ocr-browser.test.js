@@ -12,7 +12,7 @@ if (typeof WebSocket === 'undefined' || typeof fetch === 'undefined') throw new 
 const projectRoot = path.resolve(__dirname, '..', '..');
 const appRoot = path.join(projectRoot, 'app');
 const nativeFixture = path.join(projectRoot, 'dataset', 'documents', 'pension_report', 'high', 'pension-report-03-fee_heavy.pdf');
-const scannedFixture = path.join(projectRoot, 'dataset', 'documents', 'pension_report', 'degraded', 'degraded-10-pension-report-04-history_dense.pdf');
+const scannedFixture = path.join(projectRoot, 'dataset', 'documents', 'pension_report', 'degraded', 'degraded-11-pension-report-05-provider_modern.pdf');
 
 function chromiumPath() {
   const candidates = [process.env.CHROMIUM_PATH, 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', 'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe'].filter(Boolean);

@@ -17,11 +17,11 @@
   "fees": {
     "personal": {
       "deposit_rate": 0.006,
-      "balance_rate": 0.0019
+      "balance_rate": null
     },
     "fund_average": {
-      "deposit_rate": 0.0125,
-      "balance_rate": 0.0016
+      "deposit_rate": null,
+      "balance_rate": null
     }
   },
   "balances": {
@@ -43,7 +43,93 @@
       "amount": 1666.0
     }
   },
-  "contribution_history": [],
+  "contribution_history": [
+    {
+      "salaryMonth": "07/2026",
+      "depositDate": null,
+      "employerName": null,
+      "reportedSalary": 18800,
+      "employeeContribution": 1034,
+      "employerContribution": 1410,
+      "severanceContribution": 1566.04,
+      "totalContribution": 4010.04,
+      "rowClassification": "true_monthly",
+      "normalizationDisposition": "included",
+      "sourcePage": 1,
+      "intentionallyAbsentFields": [
+        "depositDate",
+        "employerName"
+      ]
+    },
+    {
+      "salaryMonth": "08/2026",
+      "depositDate": null,
+      "employerName": null,
+      "reportedSalary": 18800,
+      "employeeContribution": 1034,
+      "employerContribution": 1410,
+      "severanceContribution": 1566.04,
+      "totalContribution": 4010.04,
+      "rowClassification": "true_monthly",
+      "normalizationDisposition": "included",
+      "sourcePage": 1,
+      "intentionallyAbsentFields": [
+        "depositDate",
+        "employerName"
+      ]
+    },
+    {
+      "salaryMonth": "09/2026",
+      "depositDate": null,
+      "employerName": null,
+      "reportedSalary": 19400,
+      "employeeContribution": 1067,
+      "employerContribution": 1455,
+      "severanceContribution": 1616.02,
+      "totalContribution": 4138.02,
+      "rowClassification": "true_monthly",
+      "normalizationDisposition": "included",
+      "sourcePage": 1,
+      "intentionallyAbsentFields": [
+        "depositDate",
+        "employerName"
+      ]
+    },
+    {
+      "salaryMonth": "10/2026",
+      "depositDate": null,
+      "employerName": null,
+      "reportedSalary": 20000,
+      "employeeContribution": 1100,
+      "employerContribution": 1500,
+      "severanceContribution": 1666,
+      "totalContribution": 4266,
+      "rowClassification": "true_monthly",
+      "normalizationDisposition": "included",
+      "sourcePage": 1,
+      "intentionallyAbsentFields": [
+        "depositDate",
+        "employerName"
+      ]
+    },
+    {
+      "salaryMonth": "11/2026",
+      "depositDate": null,
+      "employerName": null,
+      "reportedSalary": 20000,
+      "employeeContribution": 1100,
+      "employerContribution": 1500,
+      "severanceContribution": 1666,
+      "totalContribution": 4266,
+      "rowClassification": "true_monthly",
+      "normalizationDisposition": "included",
+      "sourcePage": 1,
+      "intentionallyAbsentFields": [
+        "depositDate",
+        "employerName"
+      ]
+    }
+  ],
   "investment_track": null,
   "projected_pension": null,
   "coverage": {
@@ -57,9 +143,6 @@
       "report.year",
       "report.latest_period",
       "fees.personal.deposit_rate",
-      "fees.personal.balance_rate",
-      "fees.fund_average.deposit_rate",
-      "fees.fund_average.balance_rate",
       "balances.closing",
       "latest_contribution.salary",
       "latest_contribution.employee.rate",
@@ -67,10 +150,86 @@
       "latest_contribution.employer.rate",
       "latest_contribution.employer.amount",
       "latest_contribution.severance.rate",
-      "latest_contribution.severance.amount"
+      "latest_contribution.severance.amount",
+      "contribution_history",
+      "contributionTableGroundTruth",
+      "normalizedContributionMonths",
+      "expectedBaselineMonthlyContribution",
+      "expectedAverageReportedPensionSalary",
+      "expectedEmployeeContributionRate",
+      "expectedEmployerContributionRate",
+      "expectedSeveranceRate"
     ],
-    "expected_absent_fields": [],
-    "evidence": {},
-    "notes": "Imported from Pension Lab corpus v1 expected values. Full contribution history is not yet annotated."
-  }
+    "expected_absent_fields": [
+      "fees.personal.balance_rate",
+      "fees.fund_average.deposit_rate",
+      "fees.fund_average.balance_rate"
+    ],
+    "evidence": {
+      "criticalFieldAbsence": "Direct PDF inspection confirms that no personal balance-management fee is printed.",
+      "contributionHistory": {
+        "method": "direct_augmented_pdf_and_parent_lineage_inspection",
+        "parentDocument": "pld2-e775419d2c1e424e",
+        "sourcePages": [
+          1
+        ],
+        "monthlyRowsReviewed": 5,
+        "excludedRowsReviewed": 0,
+        "productionParserUsed": false
+      }
+    },
+    "notes": "Contribution history was annotated from direct source-PDF text geometry and visual layout review; it was not derived from the production parser. Null cells are intentionally absent in the source."
+  },
+  "contributionTableGroundTruth": {
+    "expectedTables": 1,
+    "excludedRows": [],
+    "printedTableTotals": null
+  },
+  "normalizedContributionMonths": [
+    {
+      "salaryMonth": "07/2026",
+      "reportedSalary": 18800,
+      "employeeContribution": 1034,
+      "employerContribution": 1410,
+      "severanceContribution": 1566.04,
+      "totalContribution": 4010.04
+    },
+    {
+      "salaryMonth": "08/2026",
+      "reportedSalary": 18800,
+      "employeeContribution": 1034,
+      "employerContribution": 1410,
+      "severanceContribution": 1566.04,
+      "totalContribution": 4010.04
+    },
+    {
+      "salaryMonth": "09/2026",
+      "reportedSalary": 19400,
+      "employeeContribution": 1067,
+      "employerContribution": 1455,
+      "severanceContribution": 1616.02,
+      "totalContribution": 4138.02
+    },
+    {
+      "salaryMonth": "10/2026",
+      "reportedSalary": 20000,
+      "employeeContribution": 1100,
+      "employerContribution": 1500,
+      "severanceContribution": 1666,
+      "totalContribution": 4266
+    },
+    {
+      "salaryMonth": "11/2026",
+      "reportedSalary": 20000,
+      "employeeContribution": 1100,
+      "employerContribution": 1500,
+      "severanceContribution": 1666,
+      "totalContribution": 4266
+    }
+  ],
+  "expectedBaselineMonthlyContribution": 4138.02,
+  "expectedAverageReportedPensionSalary": 19400,
+  "expectedEmployeeContributionRate": 0.055,
+  "expectedEmployerContributionRate": 0.075,
+  "expectedSeveranceRate": 0.0833
 }

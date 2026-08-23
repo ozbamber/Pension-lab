@@ -2,16 +2,16 @@
 
 Reviewed: **2026-08-23**.
 
-This review covers the pension-report-first PR1 flow on `codex/dataset-v2-evaluation`. The product accepts one annual or quarterly pension report, reviews the extracted pension state, asks only for years until retirement, and produces one baseline forecast. PR2 what-if controls are intentionally outside this change.
+This review covers Pension Report Extraction Engine V2 on `codex/dataset-v2-evaluation`. The product accepts one annual or quarterly pension report, reviews the extracted pension state, asks only for years until retirement, and produces one baseline forecast. PR2 what-if controls are intentionally outside this change.
 
 ## Completed suites
 
 - `npm run test:engine`: **23/23** projection-engine tests passed.
 - `npm run test:documents`: **10/10** document-model tests passed.
 - `npm run test:ocr`: **30/30** financial/spatial parser tests passed.
-- `npm run test:pension`: **24/24** legacy pension-report/reconciliation regressions plus **14/14** new pension-report-state acceptance tests passed.
-- `npm run test:dataset`: **9/9** Dataset v2 contract tests passed.
-- `npm run dataset:validate`: **66/66** documents and ground-truth records passed; 54 have a text layer and 12 are image-only.
+- `npm run test:pension`: **24/24** legacy pension-report/reconciliation regressions, **14/14** pension-report-state acceptance tests, and **24/24** Engine V2 table regressions passed.
+- `npm run test:dataset`: **12/12** Dataset v2 contract and safety-aware metric tests passed.
+- `npm run dataset:validate`: **70/70** documents and ground-truth records passed; 55 have a text layer and 15 are image-only.
 - `npm run test:browser:smoke`: the complete report-only flow passed at **1440×1000** and **390×844**, including exact 144-month projection for 12 years, real/nominal switching, no payslip or age fields, no PR2 controls, and no horizontal overflow.
 - `npm run test:browser:ocr`: **5/5** native-report, local OCR, privacy/session, mobile-overflow, and cancellation groups passed.
 - `npm run test:browser:standalone`: **4/4** generated-artifact groups passed, including 10 local vendor URLs, native report parsing, scanned report OCR, and zero 404/console/runtime/network-loading errors.
@@ -46,38 +46,33 @@ This review covers the pension-report-first PR1 flow on `codex/dataset-v2-evalua
 
 ## Dataset v2 pension-report metrics
 
+All **34** pension-report records have direct contribution-table ground truth: **170** monthly rows plus separately annotated annual/YTD exclusions. The headline set contains the **24 independent synthetic parents**; the 10 augmented children are reported separately and are not counted as independent evidence.
+
 ### Fast text-layer benchmark
 
-- Pension reports: **24/24** produced predictions.
-- Field accuracy: **83.3%**.
-- Critical-document accuracy: **45.8%**.
-- Arithmetic validation: **72/72**, **100.0% coverage**.
-- Annual: **84.8% field**, **52.4% critical**, `n=21`.
-- Quarterly: **72.7% field**, **0.0% critical**, `n=3`.
-- Contribution history: **120 raw rows**, **120 reliable normalized months**.
+- All text-layer records: **25** documents; **84.0%** automatic coverage, **100.0%** automatic critical accuracy, and **0** unsafe automatic acceptances.
+- Row detection: **100.0% precision**, **96.0% recall**, **98.0% F1**; every scored row field and normalized-month output was **96.0%** accurate.
+- Independent-parent headline: **21/24** automatic (**87.5%**), **100.0%** automatic critical accuracy, **0** unsafe acceptances, and **100.0%** row precision/recall/F1, normalization, baseline, average salary, rates, balance, and fee accuracy.
+- The additional mixed text/OCR augmentation is deliberately incomplete on the text path and correctly remains in review.
 
-Compared with remote head `1ca66e379dbaeb26f9512000c75e7609837251cc`:
+### Full local-browser benchmark
 
-- Pension-report field accuracy: **82.2% → 83.3%** (`+1.1 pp`).
-- Critical-document accuracy: **45.8% → 45.8%**.
-- Annual field accuracy: **83.5% → 84.8%**.
-- Quarterly field accuracy: **72.7% → 72.7%**.
-- Raw contribution rows: **120 → 120**; reliable normalized-month output: **not available → 120**.
+- All records: **34** documents; **25** automatic and **9** review-only (**73.5%** automatic coverage), **100.0%** automatic critical accuracy, **0** unsafe automatic acceptances, and a **100.0%** safe-outcome rate.
+- Table detection recall: **94.1%**. Row detection: **99.4% precision**, **90.6% recall**, **94.8% F1**, with **1** false extra row across 170 expected rows.
+- Normalized-month accuracy: **85.3%**; baseline and average reported salary: **82.4%** each.
+- Critical fields: balance **79.4%**, deposit fee **91.2%**, and balance fee **94.1%** across all original and augmented records.
+- Text-layer subgroup: **22/25** automatic, **100.0%** automatic critical accuracy, and **100.0%** row precision/recall/F1.
+- Image-only subgroup: **3/9** automatic, **100.0%** automatic critical accuracy, **96.7%** row precision, and **64.4%** row recall. The other six image-only records remain review-only.
+- Augmented-child subgroup: **4/10** automatic, **100.0%** automatic critical accuracy, **97.1%** row precision, and **68.0%** row recall.
+- Machine-readable remaining reasons: `BALANCE_EXTRACTION_FAILED=7` and `TOTAL_RECONCILIATION_FAILED=2`.
 
-### Full pension-report browser benchmark
+### Exact before/after comparison
 
-- Reports exercised: **30/30**; 24 text-layer and 6 image-only.
-- Field accuracy: **73.3%**.
-- Critical-document accuracy: **60.0%**.
-- Arithmetic validation: **84/84 passed**, with **84/90 possible checks run (93.3% coverage)**.
-- Annual: **73.4% field**, **57.7% critical**, `n=26`.
-- Quarterly: **72.7% field**, **75.0% critical**, `n=4`.
-- Text-layer: **88.6% field**, **75.0% critical**, `n=24`.
-- Image-only: **12.1% field**, **0.0% critical**, `n=6`.
-- Contribution history: **136 raw rows**, **132 reliable normalized months**.
-- Two image-only reports reached manual review without reliable extracted fields; no values were fabricated.
+The saved full-browser baseline at `22a4e8cbd383711987ce3714f20719f3bbd8dd92` covered the then-current 30 records: **11/30** automatic (**36.7%**), **100.0%** automatic critical accuracy, **0** unsafe acceptances, and row precision/recall/F1 of **99.3% / 90.0% / 94.4%**. Engine V2 evaluates 34 records because it adds four controlled robustness augmentations; it reaches **25/34** automatic (**73.5%**) with **100.0%** automatic critical accuracy and **0** unsafe acceptances.
 
-Dataset v2 has **0/30** pension reports with annotated `contribution_history` rows. Therefore correct-row count, salary-month accuracy, component-amount accuracy, total accuracy, and `baselineMonthlyContribution` accuracy are explicitly **n/a** for the dataset benchmark. The 14 deterministic acceptance tests cover these semantics, but they are not presented as Dataset v2 accuracy. Full history annotation is required for a genuine benchmark.
+For a like-for-like comparison on the 24 independent parents, coverage improved from **11/24 (45.8%)** to **21/24 (87.5%)** while automatic critical accuracy remained **100.0%**, unsafe acceptances remained **0**, and row precision/recall/F1 remained **100.0% / 100.0% / 100.0%**. Deposit-fee accuracy improved from **70.8%** to **100.0%** and balance-fee accuracy from **58.3%** to **100.0%**.
+
+The requested 95% automatic-coverage target is not safely attainable on the fixed parent set: three old-pension source reports do not print a personal balance-management fee, so a correct engine must send at least **3/24** to review, making **87.5%** the source-constrained ceiling. The augmented robustness set also contains scans where balance labels or complete contribution tuples are no longer legible; automatic completion would require inventing evidence. More representative source examples or explicit user confirmation are required to raise coverage without weakening safety.
 
 ## Privacy and network verification
 
@@ -89,10 +84,10 @@ Dataset v2 has **0/30** pension reports with annotated `contribution_history` ro
 
 ## Remaining failure modes and intentionally deferred scope
 
-- Image-only OCR remains weak: **12.1% field accuracy** and **0.0% critical-document accuracy** across six degraded reports. Low-quality scans frequently miss balance/fee labels and can merge contribution columns; the product routes incomplete results to review.
+- Six of nine image-only records remain review-only. Low-quality scans can erase balance labels, merge contribution columns, or leave a total that cannot be reconciled; the product does not promote these outputs automatically.
 - Provider extraction remains conservative and often abstains. Provider is useful metadata and never blocks the forecast.
-- Flat text without usable geometry can still reverse deposit and balance fees on some quarterly/annual layouts; structured browser geometry performs materially better.
-- Dataset v2 lacks annotated full contribution histories, so history accuracy cannot yet be claimed.
+- Three independent old-pension reports genuinely omit the personal balance-management fee. This is an absent source value, not a parser defect, and requires review or user confirmation.
+- Flat text without usable geometry is treated as a fallback. Structured table geometry and independent evidence paths are required before automatic acceptance.
 - Cross-browser testing outside Chromium and assistive-technology testing with a screen reader were not performed.
 - PR2 controls—fee, deposit, return and retirement what-if changes, comparisons, Explorer, scenario saving, salary phases and career breaks—are not exposed in this PR1 interface.
 - Taxes, benefit eligibility, provider-specific product rules, multiple pension products, stochastic simulation, and personal pension advice remain outside scope.

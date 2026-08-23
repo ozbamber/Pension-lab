@@ -17,6 +17,159 @@
         "evidence": { "type": "object" },
         "notes": { "type": "string" }
       }
+    },
+    "contribution_history": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/contributionRow" }
+    },
+    "contributionTableGroundTruth": {
+      "type": "object",
+      "required": ["expectedTables", "excludedRows", "printedTableTotals"],
+      "properties": {
+        "expectedTables": { "type": "integer", "minimum": 1 },
+        "excludedRows": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/excludedContributionRow" }
+        },
+        "printedTableTotals": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/contributionAmounts" }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "normalizedContributionMonths": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/normalizedContributionMonth" }
+    },
+    "expectedBaselineMonthlyContribution": { "type": "number", "minimum": 0 },
+    "expectedAverageReportedPensionSalary": { "type": "number", "minimum": 0 },
+    "expectedEmployeeContributionRate": { "type": "number", "minimum": 0, "maximum": 0.35 },
+    "expectedEmployerContributionRate": { "type": "number", "minimum": 0, "maximum": 0.35 },
+    "expectedSeveranceRate": { "type": "number", "minimum": 0, "maximum": 0.35 }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "document_type": { "const": "pension_report" } } },
+      "then": {
+        "required": [
+          "contribution_history",
+          "contributionTableGroundTruth",
+          "normalizedContributionMonths",
+          "expectedBaselineMonthlyContribution",
+          "expectedAverageReportedPensionSalary",
+          "expectedEmployeeContributionRate",
+          "expectedEmployerContributionRate",
+          "expectedSeveranceRate"
+        ]
+      }
+    }
+  ],
+  "$defs": {
+    "nullableAmount": {
+      "oneOf": [
+        { "type": "number", "minimum": 0 },
+        { "type": "null" }
+      ]
+    },
+    "contributionAmounts": {
+      "type": "object",
+      "required": [
+        "reportedSalary",
+        "employeeContribution",
+        "employerContribution",
+        "severanceContribution",
+        "totalContribution"
+      ],
+      "properties": {
+        "reportedSalary": { "$ref": "#/$defs/nullableAmount" },
+        "employeeContribution": { "$ref": "#/$defs/nullableAmount" },
+        "employerContribution": { "$ref": "#/$defs/nullableAmount" },
+        "severanceContribution": { "$ref": "#/$defs/nullableAmount" },
+        "totalContribution": { "$ref": "#/$defs/nullableAmount" }
+      }
+    },
+    "contributionRow": {
+      "allOf": [
+        { "$ref": "#/$defs/contributionAmounts" },
+        {
+          "type": "object",
+          "required": [
+            "salaryMonth",
+            "depositDate",
+            "employerName",
+            "rowClassification",
+            "normalizationDisposition",
+            "sourcePage",
+            "intentionallyAbsentFields"
+          ],
+          "properties": {
+            "salaryMonth": { "type": "string", "pattern": "^(0[1-9]|1[0-2])/20[0-9]{2}$" },
+            "depositDate": {
+              "oneOf": [
+                { "type": "string", "pattern": "^[0-3][0-9]/(0[1-9]|1[0-2])/20[0-9]{2}$" },
+                { "type": "null" }
+              ]
+            },
+            "employerName": { "type": ["string", "null"] },
+            "rowClassification": {
+              "enum": [
+                "true_monthly",
+                "duplicate",
+                "correction_conflict",
+                "late_deposit",
+                "incomplete_valid"
+              ]
+            },
+            "normalizationDisposition": { "enum": ["included", "duplicate_count_once", "ambiguous", "excluded"] },
+            "sourcePage": { "type": "integer", "minimum": 1 },
+            "intentionallyAbsentFields": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "depositDate",
+                  "employerName",
+                  "reportedSalary",
+                  "employeeContribution",
+                  "employerContribution",
+                  "severanceContribution",
+                  "totalContribution"
+                ]
+              },
+              "uniqueItems": true
+            }
+          }
+        }
+      ]
+    },
+    "normalizedContributionMonth": {
+      "allOf": [
+        { "$ref": "#/$defs/contributionAmounts" },
+        {
+          "type": "object",
+          "required": ["salaryMonth"],
+          "properties": {
+            "salaryMonth": { "type": "string", "pattern": "^(0[1-9]|1[0-2])/20[0-9]{2}$" }
+          }
+        }
+      ]
+    },
+    "excludedContributionRow": {
+      "allOf": [
+        { "$ref": "#/$defs/contributionAmounts" },
+        {
+          "type": "object",
+          "required": ["rowClassification", "normalizationDisposition", "sourcePage", "label"],
+          "properties": {
+            "rowClassification": { "enum": ["annual_ytd_summary", "table_total", "header", "other_summary"] },
+            "normalizationDisposition": { "const": "excluded" },
+            "sourcePage": { "type": "integer", "minimum": 1 },
+            "label": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
     }
   },
   "additionalProperties": true

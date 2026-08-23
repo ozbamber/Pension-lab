@@ -6,7 +6,8 @@ const net = require('net');
 const os = require('os');
 const path = require('path');
 const { spawn, execFileSync } = require('child_process');
-const { loadDataset, evaluatePredictions } = require('../../scripts/dataset/lib/dataset-core');
+const { loadDataset, evaluatePredictions, evaluatePensionReportExtraction } = require('../../scripts/dataset/lib/dataset-core');
+const { printPensionExtractionMetrics } = require('../../scripts/dataset/lib/benchmark-report');
 
 if (typeof WebSocket === 'undefined' || typeof fetch === 'undefined') {
   throw new Error('dataset browser benchmark requires Node.js 22 or newer.');
@@ -136,7 +137,11 @@ function aggregateDocuments(documents) {
 (async () => {
   const splitArg = process.argv.indexOf('--split');
   const split = splitArg >= 0 ? process.argv[splitArg + 1] : 'all';
-  const records = dataset.records.filter((record) => record.document_type === 'pension_report' && (split === 'all' || record.split === split));
+  const idArg = process.argv.indexOf('--id');
+  const selectedId = idArg >= 0 ? process.argv[idArg + 1] : null;
+  const records = dataset.records.filter((record) => record.document_type === 'pension_report' &&
+    (split === 'all' || record.split === split) && (!selectedId || record.id === selectedId));
+  if (!records.length) throw new Error(`No pension-report records matched split=${split}${selectedId ? ` and id=${selectedId}` : ''}.`);
   const { server, port, requests } = await startServer();
   const devToolsPort = await freePort();
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'pension-lab-dataset-chrome-'));
@@ -186,6 +191,7 @@ function aggregateDocuments(documents) {
     if (browserErrors.length) throw new Error(`Dataset benchmark browser errors: ${JSON.stringify(browserErrors.slice(0, 5))}`);
 
     const metrics = evaluatePredictions(projectRoot, predictions, { split, profile: 'core', documentType: 'pension_report' });
+    const extractionMetrics = evaluatePensionReportExtraction(projectRoot, predictions, { split });
     const annual = aggregateDocuments(metrics.documents.filter((document) => document.family !== 'quarterly'));
     const quarterly = aggregateDocuments(metrics.documents.filter((document) => document.family === 'quarterly'));
     const extractedRows = predictions.reduce((sum, prediction) => sum + (prediction.pensionReportState?.contributionHistory?.length || 0), 0);
@@ -202,12 +208,12 @@ function aggregateDocuments(documents) {
       console.log(`  ${layer}: fields=${pct(group.field_accuracy)}, critical=${pct(group.critical_document_accuracy)}, coverage=${pct(group.predictions / group.documents)}, n=${group.documents}`);
     }
     console.log(`  Contribution history: ${extractedRows} raw rows; ${reliableMonths} reliable normalized months.`);
-    console.log('  History field accuracy: n/a because Dataset v2 has no annotated contribution_history rows; missing values are not scored as zero.');
+    printPensionExtractionMetrics(extractionMetrics, 'Safety-aware full-browser pension benchmark');
     const outputArg = process.argv.indexOf('--json-out');
     if (outputArg >= 0 && process.argv[outputArg + 1]) {
       const output = path.resolve(process.cwd(), process.argv[outputArg + 1]);
       fs.mkdirSync(path.dirname(output), { recursive: true });
-      fs.writeFileSync(output, `${JSON.stringify({ metrics, predictions }, null, 2)}\n`);
+      fs.writeFileSync(output, `${JSON.stringify({ coreMetrics: metrics, extractionMetrics, predictions }, null, 2)}\n`);
       console.log(`Wrote ${output}`);
     }
   } finally {

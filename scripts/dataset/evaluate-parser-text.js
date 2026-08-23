@@ -4,7 +4,8 @@
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { loadDataset, evaluatePredictions } = require('./lib/dataset-core');
+const { loadDataset, evaluatePredictions, evaluatePensionReportExtraction } = require('./lib/dataset-core');
+const { printPensionExtractionMetrics } = require('./lib/benchmark-report');
 
 function loadParsers(projectRoot) {
   const sandbox = { window: {} };
@@ -29,9 +30,11 @@ const dataset = loadDataset(projectRoot);
 const parsers = loadParsers(projectRoot);
 const predictions = [];
 const pensionStates = new Map();
+const splitIndex = process.argv.indexOf('--split');
+const split = splitIndex >= 0 && process.argv[splitIndex + 1] ? process.argv[splitIndex + 1] : 'all';
 let eligible = 0;
 for (const record of dataset.records) {
-  if (!record.has_text_layer) continue;
+  if (!record.has_text_layer || (split !== 'all' && record.split !== split)) continue;
   eligible += 1;
   const textPath = path.join(projectRoot, 'dataset', 'observations', 'pdf-text', `${record.id}.txt`);
   if (!fs.existsSync(textPath)) throw new Error(`Missing text observation for ${record.id}`);
@@ -40,10 +43,11 @@ for (const record of dataset.records) {
     ? parsers.payslip.parsePayslip(text, { method: 'pdf-text' })
     : parsers.pension.parsePensionReport(text, { method: 'pdf-text' });
   if (record.document_type === 'pension_report') pensionStates.set(record.id, parsed.pensionReportState || null);
-  predictions.push({ id: record.id, fields: parserFields(parsed) });
+  predictions.push({ id: record.id, fields: parserFields(parsed), pensionReportState: parsed.pensionReportState || null, method: 'pdf-text' });
 }
 
-const result = evaluatePredictions(projectRoot, predictions, { profile: 'core', textLayerOnly: true });
+const result = evaluatePredictions(projectRoot, predictions, { profile: 'core', textLayerOnly: true, split });
+const extractionMetrics = evaluatePensionReportExtraction(projectRoot, predictions, { textLayerOnly: true, split });
 function pct(value) { return value == null ? 'n/a' : `${(value * 100).toFixed(1)}%`; }
 console.log(`Fast text-layer parser benchmark: ${eligible} eligible documents`);
 console.log(`Field accuracy: ${pct(result.summary.field_accuracy)}`);
@@ -88,15 +92,15 @@ console.log(`  Annual: fields=${pct(annualMetrics.fieldAccuracy)}, critical=${pc
 console.log(`  Quarterly: fields=${pct(quarterlyMetrics.fieldAccuracy)}, critical=${pct(quarterlyMetrics.criticalAccuracy)}, coverage=${pct(quarterlyMetrics.extractionCoverage)}, n=${quarterlyMetrics.documents}`);
 console.log(`  Text-layer: fields=${pct(pensionMetrics.field_accuracy)}, critical=${pct(pensionMetrics.critical_document_accuracy)}, n=${pensionMetrics.documents}`);
 console.log('  Image-only: n/a in the text-layer benchmark (run dataset:benchmark:browser).');
-console.log('Contribution-history metrics:');
+console.log('Contribution-history annotation:');
 console.log(`  Extracted raw rows: ${extractedRows}; reliable normalized months: ${reliableMonths}.`);
 console.log(`  Dataset v2 annotated history coverage: ${annotatedHistoryRecords.length}/${pensionRecords.length} pension reports.`);
-console.log('  Monthly-row, salary-month, component-amount, total and baseline accuracy: n/a until contribution_history ground truth is annotated; missing values are not scored as zero.');
+printPensionExtractionMetrics(extractionMetrics, 'Safety-aware text-layer pension benchmark');
 
 const outIndex = process.argv.indexOf('--json-out');
 if (outIndex >= 0 && process.argv[outIndex + 1]) {
   const output = path.resolve(process.cwd(), process.argv[outIndex + 1]);
   fs.mkdirSync(path.dirname(output), { recursive: true });
-  fs.writeFileSync(output, `${JSON.stringify(result, null, 2)}\n`);
+  fs.writeFileSync(output, `${JSON.stringify({ coreMetrics: result, extractionMetrics, predictions }, null, 2)}\n`);
   console.log(`Wrote ${output}`);
 }

@@ -4,9 +4,9 @@ This directory is the versioned benchmark contract for Israeli payslip and pensi
 
 ## Current contents
 
-- 66 documents total: 36 payslips and 30 pension reports.
-- 54 generated PDFs with text layers.
-- 12 augmented image-only/degraded PDFs for OCR stress testing.
+- 70 documents total: 36 payslips and 34 pension reports.
+- 55 PDFs with at least one text-layer page.
+- 15 image-only/degraded PDFs plus one mixed text/OCR pension report for robustness testing.
 - 15 layout families.
 - No real person's financial document is included in this version.
 
@@ -47,9 +47,15 @@ npm run dataset:benchmark:text
 npm run dataset:benchmark:browser
 ```
 
-The text benchmark is a fast parser-only loop over the 54 safe derived text observations. It does **not** prove PDF.js/browser performance. The browser benchmark runs actual PDFs through the application document pipeline and is the authoritative full-pipeline benchmark.
+The text benchmark is a fast parser-only loop over the 55 safe derived text observations. It does **not** prove PDF.js/browser performance. The browser benchmark runs actual PDFs through the application document pipeline and is the authoritative full-pipeline benchmark.
 
 Generated evaluation output belongs under `dataset/evaluation/` and is ignored by Git.
+
+Pension-report V2 robustness children are generated locally with
+`scripts/dataset/generate-pension-augmentations.py`. They cover 150/200/300 DPI,
+JPEG compression, grayscale, light blur/noise, ±1.5° rotation, removed text
+layers, and a mixed text/OCR document. These children inherit the parent split
+and are reported separately from synthetic parents.
 
 ## Real documents
 

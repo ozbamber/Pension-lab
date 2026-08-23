@@ -43,7 +43,93 @@
       "amount": 1874.25
     }
   },
-  "contribution_history": [],
+  "contribution_history": [
+    {
+      "salaryMonth": "07/2025",
+      "depositDate": null,
+      "employerName": null,
+      "reportedSalary": 21150,
+      "employeeContribution": 1163.25,
+      "employerContribution": 1586.25,
+      "severanceContribution": 1761.8,
+      "totalContribution": 4511.3,
+      "rowClassification": "true_monthly",
+      "normalizationDisposition": "included",
+      "sourcePage": 1,
+      "intentionallyAbsentFields": [
+        "depositDate",
+        "employerName"
+      ]
+    },
+    {
+      "salaryMonth": "08/2025",
+      "depositDate": null,
+      "employerName": null,
+      "reportedSalary": 21150,
+      "employeeContribution": 1163.25,
+      "employerContribution": 1586.25,
+      "severanceContribution": 1761.8,
+      "totalContribution": 4511.3,
+      "rowClassification": "true_monthly",
+      "normalizationDisposition": "included",
+      "sourcePage": 1,
+      "intentionallyAbsentFields": [
+        "depositDate",
+        "employerName"
+      ]
+    },
+    {
+      "salaryMonth": "09/2025",
+      "depositDate": null,
+      "employerName": null,
+      "reportedSalary": 21825,
+      "employeeContribution": 1200.38,
+      "employerContribution": 1636.88,
+      "severanceContribution": 1818.02,
+      "totalContribution": 4655.28,
+      "rowClassification": "true_monthly",
+      "normalizationDisposition": "included",
+      "sourcePage": 1,
+      "intentionallyAbsentFields": [
+        "depositDate",
+        "employerName"
+      ]
+    },
+    {
+      "salaryMonth": "10/2025",
+      "depositDate": null,
+      "employerName": null,
+      "reportedSalary": 22500,
+      "employeeContribution": 1237.5,
+      "employerContribution": 1687.5,
+      "severanceContribution": 1874.25,
+      "totalContribution": 4799.25,
+      "rowClassification": "true_monthly",
+      "normalizationDisposition": "included",
+      "sourcePage": 1,
+      "intentionallyAbsentFields": [
+        "depositDate",
+        "employerName"
+      ]
+    },
+    {
+      "salaryMonth": "11/2025",
+      "depositDate": null,
+      "employerName": null,
+      "reportedSalary": 22500,
+      "employeeContribution": 1237.5,
+      "employerContribution": 1687.5,
+      "severanceContribution": 1874.25,
+      "totalContribution": 4799.25,
+      "rowClassification": "true_monthly",
+      "normalizationDisposition": "included",
+      "sourcePage": 1,
+      "intentionallyAbsentFields": [
+        "depositDate",
+        "employerName"
+      ]
+    }
+  ],
   "investment_track": null,
   "projected_pension": null,
   "coverage": {
@@ -67,10 +153,81 @@
       "latest_contribution.employer.rate",
       "latest_contribution.employer.amount",
       "latest_contribution.severance.rate",
-      "latest_contribution.severance.amount"
+      "latest_contribution.severance.amount",
+      "contribution_history",
+      "contributionTableGroundTruth",
+      "normalizedContributionMonths",
+      "expectedBaselineMonthlyContribution",
+      "expectedAverageReportedPensionSalary",
+      "expectedEmployeeContributionRate",
+      "expectedEmployerContributionRate",
+      "expectedSeveranceRate"
     ],
     "expected_absent_fields": [],
-    "evidence": {},
-    "notes": "Imported from Pension Lab corpus v1 expected values. Full contribution history is not yet annotated."
-  }
+    "evidence": {
+      "contributionHistory": {
+        "method": "direct_source_pdf_inspection",
+        "sourcePages": [
+          1
+        ],
+        "monthlyRowsReviewed": 5,
+        "excludedRowsReviewed": 0,
+        "geometryExtractor": "pdfplumber 0.11.9",
+        "productionParserUsed": false
+      }
+    },
+    "notes": "Contribution history was annotated from direct source-PDF text geometry and visual layout review; it was not derived from the production parser. Null cells are intentionally absent in the source."
+  },
+  "contributionTableGroundTruth": {
+    "expectedTables": 1,
+    "excludedRows": [],
+    "printedTableTotals": null
+  },
+  "normalizedContributionMonths": [
+    {
+      "salaryMonth": "07/2025",
+      "reportedSalary": 21150,
+      "employeeContribution": 1163.25,
+      "employerContribution": 1586.25,
+      "severanceContribution": 1761.8,
+      "totalContribution": 4511.3
+    },
+    {
+      "salaryMonth": "08/2025",
+      "reportedSalary": 21150,
+      "employeeContribution": 1163.25,
+      "employerContribution": 1586.25,
+      "severanceContribution": 1761.8,
+      "totalContribution": 4511.3
+    },
+    {
+      "salaryMonth": "09/2025",
+      "reportedSalary": 21825,
+      "employeeContribution": 1200.38,
+      "employerContribution": 1636.88,
+      "severanceContribution": 1818.02,
+      "totalContribution": 4655.28
+    },
+    {
+      "salaryMonth": "10/2025",
+      "reportedSalary": 22500,
+      "employeeContribution": 1237.5,
+      "employerContribution": 1687.5,
+      "severanceContribution": 1874.25,
+      "totalContribution": 4799.25
+    },
+    {
+      "salaryMonth": "11/2025",
+      "reportedSalary": 22500,
+      "employeeContribution": 1237.5,
+      "employerContribution": 1687.5,
+      "severanceContribution": 1874.25,
+      "totalContribution": 4799.25
+    }
+  ],
+  "expectedBaselineMonthlyContribution": 4655.276,
+  "expectedAverageReportedPensionSalary": 21825,
+  "expectedEmployeeContributionRate": 0.055,
+  "expectedEmployerContributionRate": 0.075,
+  "expectedSeveranceRate": 0.0833
 }

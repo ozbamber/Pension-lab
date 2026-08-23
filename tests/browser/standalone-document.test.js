@@ -12,7 +12,7 @@ if (typeof WebSocket === 'undefined' || typeof fetch === 'undefined') {
 const projectRoot = path.resolve(__dirname, '..', '..');
 const distRoot = path.join(projectRoot, 'dist');
 const nativeFixture = path.join(projectRoot, 'dataset', 'documents', 'pension_report', 'high', 'pension-report-03-fee_heavy.pdf');
-const scannedFixture = path.join(projectRoot, 'dataset', 'documents', 'pension_report', 'degraded', 'degraded-10-pension-report-04-history_dense.pdf');
+const scannedFixture = path.join(projectRoot, 'dataset', 'documents', 'pension_report', 'degraded', 'degraded-11-pension-report-05-provider_modern.pdf');
 const requiredVendorPaths = [
   '/vendor/pdfjs/pdf.min.mjs',
   '/vendor/pdfjs/pdf.worker.min.mjs',

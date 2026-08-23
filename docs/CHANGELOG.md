@@ -1,5 +1,14 @@
 # יומן שינויים
 
+## Pension Report Extraction Engine V2 — 2026-08-23
+
+- Annotated all 34 pension-report records with direct contribution-table ground truth: 170 monthly rows, explicit annual/YTD exclusions, normalized months, derived baselines, rates, source pages, and intentional nulls.
+- Added a table-first RTL parser with header reconstruction, physical column geometry, split-cell recovery, salary-month/deposit-date separation, arithmetic constraint solving, duplicate/conflict handling, and explicit review states.
+- Added local multi-pass OCR with quality gating, grayscale/contrast preprocessing, table and numeric crops, row-level passes, and cross-path evidence consensus; raw PDF/OCR text remains local and is not persisted.
+- Added four controlled pension-report robustness augmentations spanning 150/200/300 DPI, JPEG, grayscale, blur, noise, rotation, removed text layers, and mixed text/OCR input.
+- Added safety-aware dataset metrics for table/row detection, false extras, per-field accuracy, normalization, derived values, critical automatic acceptance, review rate, unsafe acceptances, report type, text/image path, lineage, and split.
+- Added 24 focused Engine V2 regressions and expanded Dataset v2 contract tests. The independent-parent benchmark now reaches 87.5% automatic coverage, 100% automatic critical accuracy, zero unsafe acceptances, and 100% row precision/recall; three source reports omit a required fee and therefore impose an 87.5% safe coverage ceiling.
+
 ## Pension-report-first baseline forecast — 2026-08-23
 
 - Replaced the primary journey with one annual-or-quarterly pension-report upload, concise extracted-state review, one `yearsUntilRetirement` input, and one baseline forecast.
