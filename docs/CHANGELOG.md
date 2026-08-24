@@ -1,5 +1,13 @@
 # יומן שינויים
 
+## Reliability and physical-source identity safety — 2026-08-24
+
+- Restricted missing-total derivation so three observed components can clear only a missing-total completeness issue. Any unrelated parser, salary, plausibility, OCR-conflict, or source-identity issue keeps the row review-only; a diagnostic total may still be shown.
+- Removed numeric-only cross-pass row deduplication. Matching salary month and contribution values no longer establish physical-row identity without a stable source-row ID, matching page geometry, or matching employer/deposit-date/month evidence.
+- Added fail-closed `AMBIGUOUS_SOURCE_ROW_IDENTITY` handling for equal same-month tuples whose physical source cannot be proven, while preserving distinct known employers and valid native/OCR deduplication. Targeted row OCR now retains its page and source-band geometry for positive source matching.
+- Expanded the source-safety suite from 28 to 32 cases with negative regressions for ambiguous columns, invalid reported salary, and unproven same-month row identity, plus the positive employer/date/month identity case.
+- The independent supported-new parent benchmark remains 21/21 automatic with 100% critical accuracy and zero unsafe acceptances. Full-browser text-layer coverage is 22/22, while image-only coverage is reported separately at 1/8 (12.5%); no 95% overall real-world coverage claim is made.
+
 ## Fund-type routing and source-local extraction safety — 2026-08-23
 
 - Separated `fundType` (`new_pension`, `old_pension`, `unknown`) from `reportType` (`annual`, `quarterly`, `unknown`) and added independent ground truth and expected-routing annotations for all 34 pension reports.

@@ -182,8 +182,10 @@ test('11. matching salary and two components never infer severance from another 
 
 test('12. three observed components safely derive a missing total', () => {
   const row = sourceRow('01/2026', { salary: 20000, employee: 1400, employer: 1400, severance: 1200, total: null }, { rowId: 'row', reliable: false });
-  const resolved = resolve([[row]]).pensionReportState.contributionHistory[0];
+  const state = resolve([[row]]).pensionReportState;
+  const resolved = state.contributionHistory[0];
   assert.strictEqual(resolved.totalContribution, 4000); assert.strictEqual(resolved.totalSource, 'derived-from-observed-components');
+  assert.strictEqual(resolved.reliable, true); assert.strictEqual(resolved.requiresReview, false); assert.strictEqual(state.derived.monthsUsed, 1);
 });
 
 test('13. missing component with explicit total remains null', () => {
@@ -207,7 +209,7 @@ test('15. two employers survive real multipass resolution and aggregate', () => 
 
 test('16. the same employer row is deduplicated across OCR passes', () => {
   const row = sourceRow('01/2026', { salary: 20000, employee: 1400, employer: 1400, severance: 1200, total: 4000 }, { employer: 'Employer A', rowId: 'row-a' });
-  const shifted = sourceRow('01/2026', { salary: 20000, employee: 1400, employer: 1400, severance: 1200, total: 4000 }, { employer: 'Employer A', rowId: 'ocr-row-7', y: 310 });
+  const shifted = sourceRow('01/2026', { salary: 20000, employee: 1400, employer: 1400, severance: 1200, total: 4000 }, { employer: 'Employer A', rowId: 'row-a', y: 310 });
   assert.strictEqual(resolve([[row], [shifted]]).pensionReportState.contributionHistory.length, 1);
 });
 
@@ -278,5 +280,39 @@ test('28. a missing provider does not block a supported new-pension forecast', (
   assert.strictEqual(state.provider, null); assert.strictEqual(state.supportedForCurrentForecast, true); assert.ok(E.projectBaseline(state, 10).retirementBalanceReal > 300000);
 });
 
-assert.strictEqual(passed, 28);
+test('29. missing total derivation does not clear ambiguous column assignment', () => {
+  const row = sourceRow('01/2026', { salary: 20000, employee: 1400, employer: 1400, severance: 1200, total: null }, { rowId: 'ambiguous', reliable: false });
+  row.issues = ['INCOMPLETE_CONTRIBUTION_ROW', 'AMBIGUOUS_COLUMN_ASSIGNMENT'];
+  const state = resolve([[row]]).pensionReportState;
+  const resolved = state.contributionHistory[0];
+  assert.strictEqual(resolved.totalContribution, 4000); assert.strictEqual(resolved.reliable, false); assert.strictEqual(resolved.requiresReview, true);
+  assert.ok(resolved.issues.includes('AMBIGUOUS_COLUMN_ASSIGNMENT')); assert.strictEqual(state.derived.monthsUsed, 0); assert.strictEqual(state.decision.automaticAccepted, false);
+});
+
+test('30. missing total derivation does not clear invalid reported salary', () => {
+  const row = sourceRow('01/2026', { salary: 2000000, employee: 1400, employer: 1400, severance: 1200, total: null }, { rowId: 'invalid-salary', reliable: false });
+  row.issues = ['INCOMPLETE_CONTRIBUTION_ROW', 'INVALID_REPORTED_SALARY'];
+  const state = resolve([[row]]).pensionReportState;
+  const resolved = state.contributionHistory[0];
+  assert.strictEqual(resolved.totalContribution, 4000); assert.strictEqual(resolved.reliable, false); assert.strictEqual(resolved.requiresReview, true);
+  assert.ok(resolved.issues.includes('INVALID_REPORTED_SALARY')); assert.strictEqual(state.derived.monthsUsed, 0); assert.strictEqual(state.decision.automaticAccepted, false);
+});
+
+test('31. equal tuples without shared source identity remain ambiguous', () => {
+  const sourceA = sourceRow('01/2026', { salary: 20000, employee: 1400, employer: 1400, severance: 1200, total: 4000 }, { rowId: 'source-row-a', y: 140 });
+  const sourceB = sourceRow('01/2026', { salary: 20000, employee: 1400, employer: 1400, severance: 1200, total: 4000 }, { rowId: 'source-row-b', y: 310 });
+  const state = resolve([[sourceA], [sourceB]]).pensionReportState;
+  assert.strictEqual(state.contributionHistory.length, 2); assert.strictEqual(state.derived.monthsUsed, 0); assert.strictEqual(state.decision.automaticAccepted, false);
+  assert.ok(state.contributionHistory.every((row) => row.issues.includes('AMBIGUOUS_SOURCE_ROW_IDENTITY')));
+  assert.ok(state.extraction.multiPass.conflicts.some((conflict) => conflict.months?.some((month) => month.reason === 'AMBIGUOUS_SOURCE_ROW_IDENTITY')));
+});
+
+test('32. same employer date and month deduplicate without shared row ID', () => {
+  const nativeRow = sourceRow('01/2026', { salary: 20000, employee: 1400, employer: 1400, severance: 1200, total: 4000 }, { employer: 'Employer A', depositDate: '10/02/2026', rowId: 'native-row', y: 140 });
+  const ocrRow = sourceRow('01/2026', { salary: 20000, employee: 1400, employer: 1400, severance: 1200, total: 4000 }, { employer: 'Employer A', depositDate: '10/02/2026', rowId: 'ocr-row', y: 310 });
+  const state = resolve([[nativeRow], [ocrRow]]).pensionReportState;
+  assert.strictEqual(state.contributionHistory.length, 1); assert.strictEqual(state.derived.monthsUsed, 1); assert.strictEqual(state.decision.automaticAccepted, true);
+});
+
+assert.strictEqual(passed, 32);
 console.log(`All ${passed} fund-routing and source-safety regression tests passed.`);

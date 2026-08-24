@@ -234,10 +234,20 @@
     const sameRowId = candidateRowId && memberRowId && candidateRowId === memberRowId;
     const candidateY = Number(candidateSource.y);
     const memberY = Number(memberSource.y);
-    const sameGeometry = Number.isFinite(candidateY) && Number.isFinite(memberY) && Math.abs(candidateY - memberY) <= 12;
-    const sameNamedDeposit = candidateDeposit && memberDeposit && candidateDeposit === memberDeposit && (!candidateEmployer || !memberEmployer || candidateEmployer === memberEmployer);
-    const uniqueMonthObservation = candidate.sameMonthPassCount === 1 && member.sameMonthPassCount === 1 && contributionRowsAgree(candidate.row, member.row);
-    return Boolean(sameRowId || sameGeometry || sameNamedDeposit || uniqueMonthObservation);
+    const sameGeometry = Number.isFinite(candidatePage) && Number.isFinite(memberPage) && candidatePage === memberPage &&
+      Number.isFinite(candidateY) && Number.isFinite(memberY) && Math.abs(candidateY - memberY) <= 12;
+    const sameNamedDeposit = Boolean(candidateEmployer && memberEmployer && candidateEmployer === memberEmployer &&
+      candidateDeposit && memberDeposit && candidateDeposit === memberDeposit);
+    return Boolean(sameRowId || sameGeometry || sameNamedDeposit);
+  }
+
+  function explicitlyDistinctSourceRows(candidate, member) {
+    const candidateEmployer = normalizedRowIdentity(candidate.row.employerName);
+    const memberEmployer = normalizedRowIdentity(member.row.employerName);
+    if (candidateEmployer && memberEmployer && candidateEmployer !== memberEmployer) return true;
+    const candidateDeposit = candidate.row.depositDate || null;
+    const memberDeposit = member.row.depositDate || null;
+    return Boolean(candidateDeposit && memberDeposit && candidateDeposit !== memberDeposit);
   }
 
   function deriveObservedComponentTotal(row) {
@@ -249,13 +259,19 @@
     const salary = Number(row.reportedSalary);
     const total = components.reduce((sum, value) => sum + value, 0);
     if (!(salary > 0) || total >= salary * 0.65) return row;
+    const issues = [...new Set(row.issues || [])];
+    const missingTotalIssues = new Set(['INCOMPLETE_CONTRIBUTION_ROW', 'MISSING_TOTAL_CONTRIBUTION']);
+    const blockingIssues = issues.filter((issue) => !missingTotalIssues.has(issue));
+    const onlyMissingTotalWasBlocking = issues.length > 0 && blockingIssues.length === 0;
+    const alreadyReliable = row.reliable === true && row.requiresReview !== true && blockingIssues.length === 0;
+    const mayResolveReliability = alreadyReliable || onlyMissingTotalWasBlocking;
     return {
       ...row,
       totalContribution: total,
       totalSource: 'derived-from-observed-components',
-      reliable: true,
-      requiresReview: false,
-      issues: [...new Set((row.issues || []).filter((issue) => issue !== 'INCOMPLETE_CONTRIBUTION_ROW'))],
+      reliable: mayResolveReliability,
+      requiresReview: !mayResolveReliability,
+      issues: mayResolveReliability ? issues.filter((issue) => !missingTotalIssues.has(issue)) : issues,
     };
   }
 
@@ -283,16 +299,32 @@
         candidates.push({ row: deriveObservedComponentTotal(row), pass: pass.name });
       }
     }
-    for (const candidate of candidates) {
-      candidate.sameMonthPassCount = candidates.filter((other) => other.pass === candidate.pass && other.row.salaryMonth === candidate.row.salaryMonth).length;
-    }
     const clusters = [];
     const identityConflicts = [];
+    const identityAmbiguousCandidates = new Set();
     for (const candidate of candidates) {
       const compatible = clusters.filter((cluster) => cluster.members.some((member) => samePhysicalSourceRow(candidate, member)));
       if (compatible.length === 1) compatible[0].members.push(candidate);
       else {
         if (compatible.length > 1) identityConflicts.push({ salaryMonth: candidate.row.salaryMonth, pass: candidate.pass, reason: 'AMBIGUOUS_SOURCE_ROW_IDENTITY' });
+        if (!compatible.length) {
+          const ambiguousPeer = clusters.flatMap((cluster) => cluster.members).find((member) =>
+            member.pass !== candidate.pass && member.row.salaryMonth === candidate.row.salaryMonth &&
+            !explicitlyDistinctSourceRows(candidate, member) && contributionRowsAgree(candidate.row, member.row));
+          if (ambiguousPeer) {
+            identityAmbiguousCandidates.add(candidate);
+            identityAmbiguousCandidates.add(ambiguousPeer);
+            identityConflicts.push({
+              salaryMonth: candidate.row.salaryMonth,
+              passes: [ambiguousPeer.pass, candidate.pass],
+              sourceRows: [
+                ambiguousPeer.row.evidence?.sourceRow?.id || ambiguousPeer.row.evidence?.rowId || null,
+                candidate.row.evidence?.sourceRow?.id || candidate.row.evidence?.rowId || null,
+              ],
+              reason: 'AMBIGUOUS_SOURCE_ROW_IDENTITY',
+            });
+          }
+        }
         clusters.push({ members: [candidate] });
       }
     }
@@ -307,6 +339,7 @@
       pool.sort((left, right) => left.quality - right.quality || Number(right.row.confidence || 0) - Number(left.row.confidence || 0));
       const selected = pool[0];
       const contradictory = reliable.filter((candidate) => !contributionRowsAgree(selected.row, candidate.row));
+      const identityAmbiguous = cluster.members.some((candidate) => identityAmbiguousCandidates.has(candidate));
       if (contradictory.length) {
         conflicts.push({
           salaryMonth: selected.row.salaryMonth,
@@ -318,9 +351,13 @@
       }
       rows.push({
         ...selected.row,
-        reliable: contradictory.length ? false : selected.row.reliable,
-        requiresReview: contradictory.length ? true : selected.row.requiresReview,
-        issues: contradictory.length ? [...new Set([...(selected.row.issues || []), 'OCR_PASS_ROW_CONFLICT'])] : selected.row.issues,
+        reliable: contradictory.length || identityAmbiguous ? false : selected.row.reliable,
+        requiresReview: contradictory.length || identityAmbiguous ? true : selected.row.requiresReview,
+        issues: contradictory.length || identityAmbiguous ? [...new Set([
+          ...(selected.row.issues || []),
+          ...(contradictory.length ? ['OCR_PASS_ROW_CONFLICT'] : []),
+          ...(identityAmbiguous ? ['AMBIGUOUS_SOURCE_ROW_IDENTITY'] : []),
+        ])] : selected.row.issues,
         evidence: {
           ...(selected.row.evidence || {}),
           extractionPass: selected.pass,
@@ -387,6 +424,30 @@
       compactMonthAnchors: (text.replace(/(?<=\d)\s+(?=\d)/g, '').match(/(?:0[1-9]|1[0-2])(?:[/.-])?20\d{2}/g) || []).length,
       numericFragments: (text.match(/[\dOoIl|]+(?:[.,][\dOoIl|]+)*/g) || []).length,
     };
+  }
+
+  function attachTargetedRowSources(parsed, sources) {
+    const rows = parsed?.pensionReportState?.contributionHistory || [];
+    const unused = new Set(sources.map((_, index) => index));
+    for (const row of rows) {
+      const monthDigits = String(row.salaryMonth || '').replace(/\D/g, '');
+      if (!monthDigits) continue;
+      const matches = [...unused].filter((index) => String(sources[index].text || '').replace(/\D/g, '').includes(monthDigits));
+      if (matches.length !== 1) continue;
+      const index = matches[0];
+      const source = sources[index];
+      unused.delete(index);
+      row.sourcePage = source.page;
+      row.page = source.page;
+      row.evidence = {
+        ...(row.evidence || {}),
+        rowId: source.id,
+        sourcePage: source.page,
+        sourceRow: { id: source.id, page: source.page, y: source.y },
+        identityBasis: 'targeted-row-crop-source-band',
+      };
+    }
+    return parsed;
   }
 
   function linearizedOcrInput(input) {
@@ -682,6 +743,7 @@
       const numericTableOcrPages = [];
       const tableRowTexts = [];
       const tableRowConfidences = [];
+      const tableRowSources = [];
       try {
         for (let pageNumber = 1; pageNumber <= maxPages; pageNumber += 1) {
           L.throwIfAborted(options.signal);
@@ -739,7 +801,15 @@
                     psm: 7, dpi: 300, whitelist: '0123456789.,/%-−₪ ',
                   });
                   if (String(rowResult.text || '').trim()) {
-                    tableRowTexts.push(String(rowResult.text).trim());
+                    const rowText = String(rowResult.text).trim();
+                    const sourceY = Number(rowBand.y) + Number(rowBand.height) / 2;
+                    tableRowTexts.push(rowText);
+                    tableRowSources.push({
+                      text: rowText,
+                      page: pageNumber,
+                      y: sourceY,
+                      id: `p${pageNumber}-y${Math.round(sourceY)}`,
+                    });
                     if (Number.isFinite(Number(rowResult.confidence))) tableRowConfidences.push(Number(rowResult.confidence));
                   }
                 } finally {
@@ -776,6 +846,9 @@
         };
         const enhancedLinearInput = linearizedOcrInput(enhancedInput);
         const sparseLinearInput = linearizedOcrInput(sparseInput);
+        const targetedRowsParsed = tableRowTexts.length ? attachTargetedRowSources(
+          root.PensionReportParser.parsePensionReport(tableRowsInput, { method: 'ocr' }), tableRowSources,
+        ) : null;
         const parsed = resolvePensionOcrPasses([
           ...(nativePensionParsed ? [{ name: 'native-pdf', parsed: nativePensionParsed, diagnostics: { tableQualityFallback: true } }] : []),
           { name: 'whole-page-default', parsed: root.PensionReportParser.parsePensionReport(ocrInput, { method: 'ocr' }), diagnostics: ocrPassDiagnostics(ocrInput) },
@@ -785,7 +858,7 @@
           { name: 'whole-page-sparse-linear', parsed: root.PensionReportParser.parsePensionReport(sparseLinearInput, { method: 'ocr' }), diagnostics: ocrPassDiagnostics(sparseLinearInput) },
           ...(tableOcrPages.length ? [{ name: 'targeted-table', parsed: root.PensionReportParser.parsePensionReport(tableInput, { method: 'ocr' }), diagnostics: ocrPassDiagnostics(tableInput) }] : []),
           ...(numericTableOcrPages.length ? [{ name: 'targeted-table-numeric', parsed: root.PensionReportParser.parsePensionReport(numericTableInput, { method: 'ocr' }), diagnostics: ocrPassDiagnostics(numericTableInput) }] : []),
-          ...(tableRowTexts.length ? [{ name: 'targeted-table-rows', parsed: root.PensionReportParser.parsePensionReport(tableRowsInput, { method: 'ocr' }), diagnostics: ocrPassDiagnostics(tableRowsInput) }] : []),
+          ...(targetedRowsParsed ? [{ name: 'targeted-table-rows', parsed: targetedRowsParsed, diagnostics: ocrPassDiagnostics(tableRowsInput) }] : []),
         ]);
         const fields = wrapPensionReportFields(parsed, file.name);
         if (identifiedCount(fields)) {
