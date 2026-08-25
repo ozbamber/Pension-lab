@@ -152,23 +152,31 @@
         <p id="forecastModeDescription">הסכומים מוצגים בשקלים של היום.</p>
       </div>
 
-      <div class="forecast-hero">
-        <article class="pension-result">
+      <section class="forecast-hero" aria-live="polite" aria-atomic="false">
+        <div class="projection-primary">
           <span>קצבה חודשית משוערת לפני מס</span>
           <strong id="headlinePension">—</strong>
-          <small>לפי מקדם קצבה 200</small>
-        </article>
-        <article class="balance-result">
+          <small id="headlinePensionComparison">—</small>
+        </div>
+        <div class="projection-secondary">
           <span>צבירה משוערת בפרישה</span>
           <strong id="headlineBalance">—</strong>
-          <small id="horizonSummary">—</small>
-        </article>
-      </div>
+          <small id="headlineBalanceComparison">—</small>
+        </div>
+        <p id="horizonSummary" class="horizon-summary">—</p>
+      </section>
 
-      <div class="baseline-statement">
-        <span aria-hidden="true">↗</span>
-        <p><strong>הנחת הבסיס:</strong> בחישוב הבסיסי אנחנו מניחים שההפקדה החודשית נשארת קבועה במונחים ריאליים.</p>
-      </div>
+      <section id="simulatorPanel" class="simulator-panel hidden" aria-labelledby="simulatorTitle">
+        <div class="simulator-heading">
+          <div>
+            <span class="eyebrow">תרחיש משולב</span>
+            <h2 id="simulatorTitle">בדקו איך שינויים משפיעים על הפנסיה</h2>
+          </div>
+          <button type="button" id="resetSimulator" class="simulator-reset">חזרה לבסיס</button>
+        </div>
+        <p class="simulator-legend"><span aria-hidden="true"></span>ירוק מסמן טווח הנחות מרכזי. הקצוות מאפשרים לבחון תרחישי קיצון.</p>
+        <div id="simulatorControls" class="simulator-controls"></div>
+      </section>
 
       <section class="assumptions-panel" aria-labelledby="assumptionsTitle">
         <div><span class="eyebrow">המספרים שמאחורי התחזית</span><h2 id="assumptionsTitle">הנחות גלויות</h2></div>
@@ -192,6 +200,8 @@
   <script src="pension-report-parser.js?v=20260823-report-first"></script>
   <script src="local-document-pipeline.js?v=20260823-report-first"></script>
   <script src="document-extraction.js?v=20260823-report-first"></script>
-  <script src="app.js?v=20260823-report-first"></script>
+  <script src="simulator-config.js?v=20260825-pr2"></script>
+  <script src="simulator.js?v=20260825-pr2"></script>
+  <script src="app.js?v=20260825-pr2"></script>
 </body>
 </html>

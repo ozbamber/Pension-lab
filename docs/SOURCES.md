@@ -1,43 +1,26 @@
 # Sources and planning references
 
-Reviewed: **2026-08-18**.
+Reviewed: **2026-08-25**.
 
-These references provide **context for the interface only**. They are not legal, pension, tax or investment advice, and the calculation engine does not determine an individual saver's regulatory entitlement.
+These references provide **planning context for the PR2 what-if simulator only**. They are not legal, pension, tax, investment, employment, or fee-negotiation advice. Pension Lab does not infer a user's regulatory entitlement, fund subtype, or personal agreement from these references.
 
-## Statutory retirement-age default
+## Simulator source metadata
 
-The onboarding uses birth year and the selected statutory track only to suggest an editable default retirement age. The current table follows Israel's National Insurance Institute: age 67 for men; for women, a gradual increase from age 62 to 65 by birth year, reaching age 65 for January 1970 onward.
+The application stores the following reviewed metadata locally in `app/simulator-config.js`. It never fetches a source while a user moves a control.
 
-- https://www.btl.gov.il/benefits/old_age/Conditions_of_eligibility/gilMezake/Pages/gilPrisha.aspx
-- https://www.btl.gov.il/benefits/old_age/Pages/RetirementCalculation.aspx
+| Topic | Reviewed fact used in the UI | Official reference |
+| --- | --- | --- |
+| Inflation | The Bank of Israel's annual price-stability target is **1%–3%**. The simulator's immutable baseline is 2%. | [Bank of Israel – monetary policy framework](https://www.boi.org.il/roles/monetary-policy/conducting-monetary-policy/) |
+| Pension contributions | General context describes employee contributions of **6%–7%**, employer contributions of at least **6.5%**, and severance of **6%–8.33%**. The simulator's 18.5%–21.83% band is a reference range, not a universal legal limit. | [Ministry of Finance – choosing pension savings](https://haotzarsheli.mof.gov.il/Subject/Pages/Choosing-pension-saving.aspx) |
+| Management fees | New comprehensive pension funds may charge up to **6% from deposits** and **0.5% annually from balance**. General pension funds may charge from balance only, up to **2% annually**. PR2 does not infer which subtype applies to a report. | [Capital Market Authority – PensiaNet concepts](https://www.pensyanet.cma.gov.il/Home/Concepts) |
+| Selected pension funds | The 2024–2028 selection decision states a cap of **1% from deposits** and **0.22% from balance** for the joining terms described there, guaranteed for **10 years** from joining. This is a reference point, not a personal entitlement. | [Ministry of Finance – fourth selected-fund procedure](https://www.gov.il/BlobFolder/dynamiccollectorresultitem/notice-2024-101/he/Results_of_the_fourth_procedure_for_determining_selected_funds_pdf.pdf) |
+| Return assurance | The mechanism that replaced designated bonds refers to a **5.15% CPI-linked annual return** for the relevant approximately **30%** asset tranche. It is educational context only and is not used by the PR2 projection model. | [Capital Market Authority – return-assurance regulation materials](https://www.gov.il/he/pages/regulation_0009) |
 
-The interface does not calculate benefit eligibility. Users can change the retirement age used by the projection.
+## PR2 model boundaries
 
-## Israel inflation target
-
-The Bank of Israel defines price stability as annual inflation within a **1%–3%** range. The simulator therefore shows 1%–3% as planning context while leaving inflation fully editable.
-
-- https://www.boi.org.il/en/bank-of-israel/about-the-bank-of-israel/objectives-and-functions/
-- https://www.boi.org.il/media/jybpi3rm/%D7%9E%D7%95%D7%A0%D7%99%D7%98%D7%A8%D7%99%D7%AA-%D7%9E%D7%97%D7%A6%D7%99%D7%AA-%D7%A8%D7%90%D7%A9%D7%95%D7%A0%D7%94-2026.pdf
-
-## Pension return-assurance mechanism
-
-The 2021 legislation and implementation materials replaced designated pension bonds with a return-assurance mechanism whose reference rate is a **5.15% annual real return**. The original framework referred to **30% of pension-fund assets**.
-
-Subsequent official materials show that the **allocation among savers and investment tracks is not safely represented by one universal 30% assumption**:
-
-- A 2024 proposal described age- and track-dependent allocation and a temporary extension through the end of 2025.
-- A 2025 draft proposed, among other changes, allocating 40% to certain savers aged 60 and over instead of the previously proposed 30% allocation for savers aged 50 and over.
-
-Because these rules can depend on age, track, transition provisions and final regulation, the simulator exposes the protected weight as an editable **planning parameter**. Its 30% default is an example, not a calculation of legal eligibility. Users should verify the rules applicable to their own fund and projection date.
-
-Official references:
-
-- Original mechanism and 5.15% real target: https://www.gov.il/he/pages/regulation_0005
-- 2024 allocation proposal and temporary extension: https://main.knesset.gov.il/News/PressReleases/Pages/PRESS29.12.24A.aspx
-- 2025 allocation draft: https://www.gov.il/he/pages/regulation_0063
-- 2024 implementation report: https://fs.knesset.gov.il/25/SecondaryLaw/25_scl_rp_6135446.pdf
-
-## Return assumptions
-
-The 4%–6% real range shown in the interface is deliberately labeled a **planning range**, not a forecast. Users can enter other assumptions and split them into multiple phases.
+- A trusted `new_pension` report state and the existing years-until-retirement answer are required before the simulator is shown. Old-pension and unknown-fund routes remain blocked.
+- The immutable baseline keeps the existing PR1 assumptions: 4% real return, 2% inflation, coefficient 200, the report-derived monthly contribution, and the report's personal fees. The displayed nominal equivalent is exactly `(1 + 0.04) × (1 + 0.02) − 1 = 6.08%`.
+- The selected scenario uses the same projection engine. Its real return is always calculated as `(1 + nominal return) / (1 + inflation) − 1`, never as simple subtraction.
+- Green on a track means a central comparison range. It does **not** mean a financially good outcome, and amber/red edges do **not** mean an impossible scenario.
+- A contribution-rate control is available only when the report has a reliable or manually confirmed average pension salary. Otherwise PR2 exposes an amount-only, 50%–150% simulation around the confirmed monthly contribution and does not fabricate a salary or a salary percentage.
+- What-if control values are in-memory UI state only. They are not saved to session storage, localStorage, IndexedDB, a backend, analytics, or a network request.

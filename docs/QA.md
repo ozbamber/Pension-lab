@@ -1,12 +1,13 @@
 # QA status
 
-Reviewed: **2026-08-24**.
+Reviewed: **2026-08-25**.
 
-This review covers Pension Report Extraction Engine V2 on `codex/dataset-v2-evaluation`. The product accepts one annual or quarterly pension report, reviews the extracted pension state, asks only for years until retirement, and produces one baseline forecast. PR2 what-if controls are intentionally outside this change.
+This review covers the PR2 Interactive Pension What-If Simulator on `codex/pr2-interactive-simulator`, based directly on reviewed PR1 safety SHA `f7978fe1a15c8e2f738ec0de629e77ff736ceabb`. The product accepts one annual or quarterly pension report, requires trusted `new_pension` routing and one years-until-retirement answer, and then exposes a session-only what-if simulator using the unchanged projection engine. PR1 extraction architecture and Dataset v2 ground truth remain frozen.
 
 ## Completed suites
 
 - `npm run test:engine`: **23/23** projection-engine tests passed.
+- `npm run test:simulator`: **26/26** immutable what-if scenario, nominal/real conversion, reset, contribution, fee, range-status, and safe-routing tests passed.
 - `npm run test:documents`: **10/10** document-model tests passed.
 - `npm run test:ocr`: **30/30** financial/spatial parser tests passed.
 - `npm run test:pension`: **24/24** legacy pension-report/reconciliation regressions, **14/14** pension-report-state acceptance tests, **24/24** Engine V2 table regressions, and **32/32** fund-routing/source-safety regressions passed.
@@ -15,12 +16,19 @@ This review covers Pension Report Extraction Engine V2 on `codex/dataset-v2-eval
 - `npm run dataset:benchmark:text`: all 55 eligible text observations completed; supported-new independent parents were **21/21** automatic with **100.0%** critical accuracy and **0** unsafe acceptances.
 - `npm run dataset:benchmark:browser`: all **34/34** pension PDFs completed through the real local browser pipeline; detailed supported-new and routing results appear below.
 - `npm run dataset:benchmark:compare -- --before-ref 2a6f05b8a0d38830da5ecc606dd124b99ba6ebf6`: extraction field/critical/validation metrics remained **88.2% / 96.0% / 100.0%** while the new routing contract made all **21/21** supported-new parents eligible for safe automatic acceptance.
-- `npm run test:browser:smoke`: old-pension blocking and unknown-fund confirmation passed; the complete report-only flow also passed at **1440×1000** and **390×844**, including exact 144-month projection for 12 years, real/nominal switching, no payslip or age fields, no PR2 controls, and no horizontal overflow.
+- `npm run test:browser:smoke`: old-pension blocking and unknown-fund confirmation passed; the complete report-only flow also passed at **1440×1000** and **390×844**, including exact 144-month projection for 12 years, real/nominal switching, no payslip or age fields, and no horizontal overflow.
+- `npm run test:browser:simulator`: supported-new gating, all five controls, combined changes, fixed baseline markers, global reset, positive/negative deltas, real/nominal consistency, keyboard interaction, desktop information UI, mobile tap information UI, session-only state, no interaction network request, and 390px overflow checks passed.
 - `npm run test:browser:ocr`: **5/5** native-report, local OCR, privacy/session, mobile-overflow, and cancellation groups passed.
 - `npm run test:browser:standalone`: **4/4** generated-artifact groups passed, including 10 local vendor URLs, native report parsing, scanned report OCR, and zero 404/console/runtime/network-loading errors.
-- `npm run build`: generated **219 files** from canonical `app/`, including `dist/pension-lab-he-standalone.html`; two consecutive builds produced identical SHA256 `D9B0831BBBEC589E6A42B45DF3B5E3EEA69AC778FB5D1CF22ECD7F055E07530A`.
-- `npm run check:standalone`: **6/6** authored inline script blocks passed syntax validation.
-- `node --check` over `app/`, `scripts/`, and `tests/`: **35/35** JavaScript files passed syntax validation.
+- `npm run build`: generated **221 files** from canonical `app/`, including `dist/pension-lab-he-standalone.html`; two consecutive builds produced identical SHA256 `7DEEE94D513A689CAEF63ED93F30129375D5674BCEB54BA997D856D7CA5441F8`.
+- `npm run check:standalone`: **8/8** authored inline script blocks passed syntax validation.
+- `node --check` over `app/`, `scripts/`, and `tests/`: **39/39** JavaScript files passed syntax validation.
+
+## PR2 visual and interaction review
+
+- Chromium visual inspection at **1440×1000** confirmed one integrated central result above one compact RTL simulator, five physical LTR range tracks, a fixed dark baseline marker, a distinct selection thumb, and no scattered projection cards.
+- Chromium visual inspection at **390×844** confirmed one-column layout, no horizontal overflow, 44px information targets, enlarged slider thumbs, central result above the controls, and an accessible fixed information bottom sheet.
+- Desktop hover/focus/click information behavior, mobile tap behavior, Escape/close behavior, keyboard adjustment, exact global reset, real/nominal switching, combined-control updates, and zero interaction network requests are covered by the browser suite.
 
 ## Product-flow verification
 
@@ -31,9 +39,9 @@ This review covers Pension Report Extraction Engine V2 on `codex/dataset-v2-eval
 5. The only normal post-extraction question is “כמה שנים נשארו לך עד הפרישה?”. Twelve years produces exactly 144 projection months.
 6. The forecast uses the extracted balance, the arithmetic mean of all reliable normalized monthly deposits, confirmed personal fees, 4% real return, 2% inflation, and coefficient 200.
 7. The baseline contribution remains constant in real terms. Nominal cash flows increase only through the existing inflation conversion; no salary-growth assumption is required.
-8. The initial result exposes no return, fee, contribution, retirement-age, comparison, Explorer, saved-scenario, or advanced what-if controls. Those belong to PR2.
-9. Real and nominal displays update from the same projection and remained consistent in desktop and mobile browser tests.
-10. Reset returns to the single-report upload and clears the session. Confirmed normalized numbers can survive a same-tab refresh, but the document, filename, and raw OCR/contribution-row text are not persisted.
+8. After a supported new-pension baseline exists, the result exposes one compact five-track PR2 simulator: nominal return, inflation, total contribution rate or a safe amount-only fallback, deposit fee, and balance fee. Old-pension and unknown states do not expose it.
+9. The immutable baseline remains the PR1 calculation: 4% real return, 2% inflation, coefficient 200, actual report contribution, and actual report fees. The displayed 6.08% nominal default converts back through the ratio formula, and the selected scenario is compared in the same real or nominal money basis.
+10. The simulator's global reset returns each control and result to exact baseline. What-if controls are not persisted; confirmed normalized report values can survive a same-tab refresh, but the document, filename, raw OCR/contribution-row text, and what-if choices are not persisted.
 
 ## Contribution-history rules verified
 
@@ -101,5 +109,5 @@ Against the requested starting SHA `2a6f05b8a0d38830da5ecc606dd124b99ba6ebf6`, t
 - Old-pension extraction values are not treated as forecast inputs. Positive old-pension evidence routes directly to the unsupported rights-based-model state; insufficient evidence remains unknown and blocked.
 - Flat text without usable geometry is treated as a fallback. Structured table geometry and independent evidence paths are required before automatic acceptance.
 - Cross-browser testing outside Chromium and assistive-technology testing with a screen reader were not performed.
-- PR2 controls—fee, deposit, return and retirement what-if changes, comparisons, Explorer, scenario saving, salary phases and career breaks—are not exposed in this PR1 interface.
+- Deferred features remain named/saved scenarios, comparison of three or more saved scenarios, salary growth, career breaks, investment allocation, retirement-age Explorer, coefficient controls, provider recommendations, and personalized optimization. PR2 deliberately does not add them.
 - Taxes, benefit eligibility, provider-specific product rules, multiple pension products, stochastic simulation, and personal pension advice remain outside scope.

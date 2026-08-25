@@ -4,10 +4,12 @@
   const E = window.PensionEngine;
   const D = window.PensionDocuments;
   const R = window.PensionReportParser;
-  if (!E || !D || !R) throw new Error('Pension Lab dependencies are missing.');
+  const S = window.PensionSimulator;
+  const C = window.PensionSimulatorConfig;
+  if (!E || !D || !R || !S || !C) throw new Error('Pension Lab dependencies are missing.');
 
   const SESSION_KEY = 'pension-lab-report-first-session-v1';
-  const DEFAULT_ASSUMPTIONS = Object.freeze({ realReturnRate: 0.04, inflationRate: 0.02, coefficient: 200 });
+  const DEFAULT_ASSUMPTIONS = C.BASELINE;
   const volatileStorage = new Map();
   const $ = (id) => document.getElementById(id);
 
@@ -19,6 +21,12 @@
   let moneyMode = 'real';
   let processingController = null;
   let userCorrections = {};
+  let simulatorBaseline = null;
+  let simulatorControls = null;
+  let selectedSimulatorScenario = null;
+  let simulatorComparison = null;
+  let simulatorRenderFrame = null;
+  let renderedSimulatorBaseline = null;
 
   function storageGet(key) {
     try { return window.sessionStorage.getItem(key); }
@@ -147,8 +155,14 @@
       userCorrections = payload.userCorrections && typeof payload.userCorrections === 'object' ? payload.userCorrections : {};
       flowStep = Math.max(2, Math.min(4, Number(payload.flowStep) || 2));
       if (flowStep === 4 && yearsUntilRetirement) {
-        try { projection = E.projectBaseline(pensionReportState, yearsUntilRetirement, DEFAULT_ASSUMPTIONS); }
-        catch (_) { flowStep = 2; projection = null; }
+        try {
+          initializeSimulator();
+          projection = simulatorBaseline.projection;
+        } catch (_) {
+          flowStep = 2;
+          projection = null;
+          resetSimulatorState();
+        }
       }
       return true;
     } catch (_) {
@@ -306,27 +320,300 @@
     return valid;
   }
 
-  function renderForecast() {
+  function signedMoney(value) {
+    const numeric = Number(value) || 0;
+    if (Math.abs(numeric) < 0.005) return '';
+    return `${numeric > 0 ? '+' : '-'}${formatMoney(Math.abs(numeric))}`;
+  }
+
+  function resetSimulatorState() {
+    if (simulatorRenderFrame != null) {
+      if (window.cancelAnimationFrame) window.cancelAnimationFrame(simulatorRenderFrame);
+      else window.clearTimeout(simulatorRenderFrame);
+    }
+    simulatorBaseline = null;
+    simulatorControls = null;
+    selectedSimulatorScenario = null;
+    simulatorComparison = null;
+    simulatorRenderFrame = null;
+    renderedSimulatorBaseline = null;
+    if ($('simulatorPanel')) $('simulatorPanel').classList.add('hidden');
+    if ($('simulatorControls')) $('simulatorControls').innerHTML = '';
+  }
+
+  function initializeSimulator() {
+    simulatorBaseline = S.buildSimulatorBaseline(pensionReportState, yearsUntilRetirement, {
+      salaryConfirmed: Boolean(userCorrections.averageReportedPensionSalary),
+    });
+    simulatorControls = S.resetSimulatorControls(simulatorBaseline);
+    selectedSimulatorScenario = S.applySimulatorOverrides(simulatorBaseline, simulatorControls);
+    simulatorComparison = S.compareSimulatorScenario(simulatorBaseline, selectedSimulatorScenario);
+    return simulatorBaseline;
+  }
+
+  function simulatorStatusText(status) {
+    if (status === 'central') return C.COPY.centralStatus;
+    if (status === 'moderate') return C.COPY.moderateStatus;
+    return C.COPY.extremeStatus;
+  }
+
+  function percentageForConfigValue(config, value, digits = config.valueDigits || 0) {
+    return formatPercentRatio(value, digits);
+  }
+
+  function contributionAmountForValue(value) {
+    if (!simulatorBaseline) return 0;
+    const contribution = simulatorBaseline.contribution;
+    return contribution.type === 'rate'
+      ? contribution.averageReportedPensionSalary * value
+      : contribution.baselineMonthlyContribution * value;
+  }
+
+  function formatSimulatorValue(key, config, value) {
+    if (key === 'contribution' && config.unit === 'multiplier') return formatMoney(contributionAmountForValue(value));
+    return percentageForConfigValue(config, value);
+  }
+
+  function simulatorValueAriaText(key, config, value) {
+    const status = simulatorStatusText(S.scenarioRangeStatus(config, value));
+    if (key === 'contribution' && config.unit === 'multiplier') {
+      return `${config.label}: ${formatMoney(contributionAmountForValue(value))}, ${Math.round(value * 100)}% מנקודת הבסיס. ${status}.`;
+    }
+    const amount = key === 'contribution' ? `, כ-${formatMoney(contributionAmountForValue(value))} לחודש` : '';
+    return `${config.label}: ${formatSimulatorValue(key, config, value)}${amount}. ${status}.`;
+  }
+
+  function sliderPercent(config, value) {
+    return ((Number(value) - config.min) / (config.max - config.min)) * 100;
+  }
+
+  function sliderStyle(config, value) {
+    return [
+      `--central-start:${sliderPercent(config, config.centralMin)}%`,
+      `--central-end:${sliderPercent(config, config.centralMax)}%`,
+      `--moderate-start:${sliderPercent(config, config.moderateMin)}%`,
+      `--moderate-end:${sliderPercent(config, config.moderateMax)}%`,
+      `--baseline-position:${sliderPercent(config, config.baselineValue)}%`,
+      `--selection-position:${sliderPercent(config, value)}%`,
+    ].join(';');
+  }
+
+  function sourceLinksFor(config) {
+    const sources = (config.sourceIds || []).map((id) => C.SOURCES[id]).filter(Boolean);
+    if (!sources.length) return '';
+    return `<div class="simulator-info-sources"><strong>מקורות שנבדקו ב-${escapeHtml(C.REVIEWED_DATE)}</strong>${sources.map((source) => `
+      <a href="${escapeHtml(source.sourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.sourceOrganization)} · ${escapeHtml(source.sourceTitle)}</a>
+      <small>${escapeHtml(source.note)}</small>`).join('')}</div>`;
+  }
+
+  function sliderTickLabel(config, value) {
+    if (config.unit === 'multiplier') return `${Math.round(value * 100)}% מהבסיס`;
+    return percentageForConfigValue(config, value, config.tickDigits || 0);
+  }
+
+  function renderSimulatorSlider(key, config, options = {}) {
+    const value = simulatorControls[key];
+    const status = S.scenarioRangeStatus(config, value);
+    const id = `simulator-${key}`;
+    const amountLine = key === 'contribution'
+      ? `<span class="simulator-control-subvalue" data-simulator-amount="${key}">${config.unit === 'multiplier' ? `${Math.round(value * 100)}% מנקודת הבסיס` : `≈ ${formatMoney(contributionAmountForValue(value))} לחודש`}</span>`
+      : '';
+    const info = config.info || { title: config.label, paragraphs: [] };
+    return `<article class="simulator-control${options.compact ? ' simulator-control-compact' : ''}" data-simulator-control="${key}" data-range-status="${status}" style="${sliderStyle(config, value)}">
+      <div class="simulator-control-header">
+        <div class="simulator-control-title">
+          <h3 id="${id}-label">${escapeHtml(config.label)}</h3>
+          <button type="button" class="simulator-info-button" data-simulator-info="${key}" aria-controls="${id}-info" aria-expanded="false" aria-label="מידע על ${escapeHtml(config.label)}">ⓘ</button>
+        </div>
+        <div class="simulator-selected-value">
+          <output id="${id}-value" data-simulator-value="${key}">${escapeHtml(formatSimulatorValue(key, config, value))}</output>
+          ${amountLine}
+        </div>
+      </div>
+      <div class="simulator-range-wrap" dir="ltr">
+        <input id="${id}-input" class="simulator-range" data-simulator-input="${key}" type="range" min="0" max="${C.SLIDER_POSITION_MAX}" step="1" value="${S.valueToPosition(config, value)}" aria-labelledby="${id}-label" aria-describedby="${id}-status" aria-valuemin="${config.unit === 'multiplier' ? config.min * 100 : config.min * 100}" aria-valuemax="${config.unit === 'multiplier' ? config.max * 100 : config.max * 100}" aria-valuenow="${config.unit === 'multiplier' ? value * 100 : value * 100}" aria-valuetext="${escapeHtml(simulatorValueAriaText(key, config, value))}" />
+        <span class="simulator-baseline-marker" aria-hidden="true"><i></i><b>${escapeHtml(C.COPY.baseline)}</b></span>
+      </div>
+      <div class="simulator-ticks" dir="ltr" aria-hidden="true"><span>${escapeHtml(sliderTickLabel(config, config.min))}</span><span class="simulator-central-tick">${escapeHtml(sliderTickLabel(config, config.centralMin))}–${escapeHtml(sliderTickLabel(config, config.centralMax))}</span><span>${escapeHtml(sliderTickLabel(config, config.max))}</span></div>
+      <span id="${id}-status" class="visually-hidden" data-simulator-status="${key}">${escapeHtml(simulatorStatusText(status))}</span>
+      <section id="${id}-info" class="simulator-info hidden" role="dialog" aria-label="${escapeHtml(info.title)}" aria-modal="false">
+        <button type="button" class="simulator-info-close" data-simulator-info-close="${key}" aria-label="סגירת מידע">×</button>
+        <h4>${escapeHtml(info.title)}</h4>
+        ${info.paragraphs.map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`).join('')}
+        ${sourceLinksFor(config)}
+        <p class="simulator-info-disclaimer">המידע מיועד להשוואת תרחישים בלבד, ואינו ייעוץ פנסיוני אישי.</p>
+      </section>
+    </article>`;
+  }
+
+  function closeSimulatorInfo(exceptKey = null) {
+    document.querySelectorAll('.simulator-info').forEach((panel) => {
+      const key = panel.closest('[data-simulator-control]')?.dataset.simulatorControl;
+      if (key === exceptKey) return;
+      panel.classList.add('hidden');
+      const button = document.querySelector(`[data-simulator-info="${key}"]`);
+      if (button) {
+        button.setAttribute('aria-expanded', 'false');
+        delete button.dataset.pinned;
+      }
+    });
+  }
+
+  function setSimulatorInfoOpen(key, open, pinned = false) {
+    const panel = $(`simulator-${key}-info`);
+    const button = document.querySelector(`[data-simulator-info="${key}"]`);
+    if (!panel || !button) return;
+    if (open) closeSimulatorInfo(key);
+    panel.classList.toggle('hidden', !open);
+    button.setAttribute('aria-expanded', String(open));
+    if (open && pinned) button.dataset.pinned = 'true';
+    if (!open) delete button.dataset.pinned;
+  }
+
+  function syncSimulatorControlUi(key) {
+    if (!simulatorBaseline || !simulatorControls) return;
+    const config = simulatorBaseline.controlsConfig[key];
+    const value = simulatorControls[key];
+    const control = document.querySelector(`[data-simulator-control="${key}"]`);
+    if (!control) return;
+    const status = S.scenarioRangeStatus(config, value);
+    control.dataset.rangeStatus = status;
+    control.style.setProperty('--selection-position', `${sliderPercent(config, value)}%`);
+    const input = control.querySelector('[data-simulator-input]');
+    const output = control.querySelector('[data-simulator-value]');
+    const statusNode = control.querySelector('[data-simulator-status]');
+    if (input) {
+      input.value = String(S.valueToPosition(config, value));
+      input.setAttribute('aria-valuenow', String(value * 100));
+      input.setAttribute('aria-valuetext', simulatorValueAriaText(key, config, value));
+    }
+    if (output) output.textContent = formatSimulatorValue(key, config, value);
+    if (statusNode) statusNode.textContent = simulatorStatusText(status);
+    const amount = control.querySelector('[data-simulator-amount]');
+    if (amount && key === 'contribution') {
+      amount.textContent = config.unit === 'multiplier'
+        ? `${Math.round(value * 100)}% מנקודת הבסיס`
+        : `≈ ${formatMoney(contributionAmountForValue(value))} לחודש`;
+    }
+  }
+
+  function renderSimulatorControls() {
+    if (!simulatorBaseline) return;
+    const controls = simulatorBaseline.controlsConfig;
+    $('simulatorControls').innerHTML = [
+      renderSimulatorSlider('nominalReturn', controls.nominalReturn),
+      renderSimulatorSlider('inflation', controls.inflation),
+      renderSimulatorSlider('contribution', controls.contribution),
+      `<section class="simulator-fees" aria-labelledby="simulatorFeesTitle"><div class="simulator-fees-heading"><span class="eyebrow">שני רכיבים, תרחיש אחד</span><h3 id="simulatorFeesTitle">דמי ניהול</h3></div>${renderSimulatorSlider('depositFee', controls.depositFee, { compact: true })}${renderSimulatorSlider('balanceFee', controls.balanceFee, { compact: true })}</section>`,
+    ].join('');
+    renderedSimulatorBaseline = simulatorBaseline;
+    $('simulatorPanel').classList.remove('hidden');
+
+    document.querySelectorAll('[data-simulator-input]').forEach((input) => {
+      input.addEventListener('input', () => {
+        const key = input.dataset.simulatorInput;
+        const config = simulatorBaseline.controlsConfig[key];
+        setSimulatorControlValue(key, S.positionToValue(config, input.value), { snap: true });
+      });
+      input.addEventListener('keydown', (event) => {
+        const key = input.dataset.simulatorInput;
+        const config = simulatorBaseline.controlsConfig[key];
+        const stepDirection = event.key === 'ArrowRight' || event.key === 'ArrowUp' ? 1
+          : event.key === 'ArrowLeft' || event.key === 'ArrowDown' ? -1 : 0;
+        if (event.key === 'Home' || event.key === 'End' || stepDirection) {
+          event.preventDefault();
+          const raw = event.key === 'Home' ? config.min : event.key === 'End' ? config.max
+            : simulatorControls[key] + stepDirection * config.step;
+          setSimulatorControlValue(key, raw, { snap: true });
+        }
+      });
+    });
+    document.querySelectorAll('[data-simulator-info]').forEach((button) => {
+      const key = button.dataset.simulatorInfo;
+      button.addEventListener('click', () => {
+        const pinned = button.dataset.pinned === 'true';
+        setSimulatorInfoOpen(key, !pinned, !pinned);
+      });
+      button.addEventListener('mouseenter', () => { if (button.dataset.pinned !== 'true') setSimulatorInfoOpen(key, true); });
+      button.addEventListener('focus', () => { if (button.dataset.pinned !== 'true') setSimulatorInfoOpen(key, true); });
+    });
+    document.querySelectorAll('[data-simulator-info-close]').forEach((button) => {
+      button.addEventListener('click', () => setSimulatorInfoOpen(button.dataset.simulatorInfoClose, false));
+    });
+  }
+
+  function updateForecastResult() {
     if (!projection) return;
     const real = moneyMode === 'real';
-    const pension = real ? projection.monthlyPensionReal : projection.monthlyPensionNominal;
-    const balance = real ? projection.retirementBalanceReal : projection.retirementBalanceNominal;
+    const baseline = simulatorComparison?.baseline || projection;
+    const atBaseline = simulatorBaseline && S.controlsAtBaseline(simulatorBaseline, simulatorControls);
+    const scenario = atBaseline ? baseline : (simulatorComparison?.scenario || projection);
+    const pension = real ? scenario.monthlyPensionReal : scenario.monthlyPensionNominal;
+    const balance = real ? scenario.retirementBalanceReal : scenario.retirementBalanceNominal;
+    const baselinePension = real ? baseline.monthlyPensionReal : baseline.monthlyPensionNominal;
+    const baselineBalance = real ? baseline.retirementBalanceReal : baseline.retirementBalanceNominal;
+    const pensionDelta = pension - baselinePension;
+    const balanceDelta = balance - baselineBalance;
     $('headlinePension').textContent = formatMoney(pension);
     $('headlineBalance').textContent = formatMoney(balance);
-    $('horizonSummary').textContent = `בעוד ${yearsUntilRetirement} שנים · ${projection.monthsUntilRetirement} חודשים בדיוק`;
+    $('headlinePensionComparison').textContent = `בסיס ${formatMoney(baselinePension)}${atBaseline ? '' : ` · ${signedMoney(pensionDelta)}`}`;
+    $('headlineBalanceComparison').textContent = `בסיס ${formatMoney(baselineBalance)}${atBaseline ? '' : ` · ${signedMoney(balanceDelta)}`}`;
+    $('headlinePensionComparison').dataset.delta = atBaseline ? 'neutral' : pensionDelta >= 0 ? 'positive' : 'negative';
+    $('headlineBalanceComparison').dataset.delta = atBaseline ? 'neutral' : balanceDelta >= 0 ? 'positive' : 'negative';
+    $('horizonSummary').textContent = `בעוד ${yearsUntilRetirement} שנים · ${baseline.monthsUntilRetirement} חודשים בדיוק`;
     $('forecastModeDescription').textContent = real
       ? 'הסכומים מוצגים בשקלים של היום, לאחר קיזוז השפעת האינפלציה.'
       : 'הסכומים מוצגים בשקלים עתידיים וכוללים את הנחת האינפלציה.';
     document.querySelectorAll('[data-money-mode]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.moneyMode === moneyMode)));
+  }
+
+  function renderForecastAssumptions() {
     const assumptions = [
       ['יתרה נוכחית', formatMoney(pensionReportState.currentBalance)],
-      ['הפקדה חודשית ממוצעת', `${formatMoney(pensionReportState.derived.baselineMonthlyContribution)} במונחים ריאליים`],
-      ['תשואה שנתית', `${formatPercentRatio(DEFAULT_ASSUMPTIONS.realReturnRate, 0)} ריאלית`],
-      ['אינפלציה', `${formatPercentRatio(DEFAULT_ASSUMPTIONS.inflationRate, 0)} לשנה`],
-      ['דמי ניהול', `${formatPercentRatio(pensionReportState.fees.depositRate)} מהפקדה · ${formatPercentRatio(pensionReportState.fees.balanceRate)} מצבירה`],
-      ['אופק החישוב', `${yearsUntilRetirement} שנים (${projection.monthsUntilRetirement} חודשים)`],
+      ['הפקדה חודשית בבסיס', `${formatMoney(pensionReportState.derived.baselineMonthlyContribution)} במונחים ריאליים`],
+      ['תשואה בבסיס', `${formatPercentRatio(DEFAULT_ASSUMPTIONS.realReturnRate, 0)} ריאלית · ${formatPercentRatio(DEFAULT_ASSUMPTIONS.nominalReturnRate, 2)} נומינלית`],
+      ['אינפלציה בבסיס', `${formatPercentRatio(DEFAULT_ASSUMPTIONS.inflationRate, 0)} לשנה`],
+      ['דמי ניהול בבסיס', `${formatPercentRatio(pensionReportState.fees.depositRate)} מהפקדה · ${formatPercentRatio(pensionReportState.fees.balanceRate)} מצבירה`],
+      ['אופק ומקדם', `${yearsUntilRetirement} שנים · מקדם ${DEFAULT_ASSUMPTIONS.coefficient}`],
     ];
     $('forecastAssumptions').innerHTML = assumptions.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join('');
+  }
+
+  function renderForecast() {
+    if (!projection) return;
+    if (!simulatorBaseline) initializeSimulator();
+    if (renderedSimulatorBaseline !== simulatorBaseline) renderSimulatorControls();
+    updateForecastResult();
+    renderForecastAssumptions();
+  }
+
+  function scheduleSimulatorProjection() {
+    if (!simulatorBaseline || simulatorRenderFrame != null) return;
+    const schedule = window.requestAnimationFrame || ((callback) => window.setTimeout(callback, 16));
+    simulatorRenderFrame = schedule(() => {
+      simulatorRenderFrame = null;
+      selectedSimulatorScenario = S.applySimulatorOverrides(simulatorBaseline, simulatorControls);
+      simulatorComparison = S.compareSimulatorScenario(simulatorBaseline, selectedSimulatorScenario);
+      updateForecastResult();
+    });
+  }
+
+  function setSimulatorControlValue(key, rawValue, options = {}) {
+    if (!simulatorBaseline || !simulatorControls) return;
+    const config = simulatorBaseline.controlsConfig[key];
+    const clamped = Math.min(config.max, Math.max(config.min, Number(rawValue)));
+    const value = options.snap ? S.snapToStep(config, clamped) : clamped;
+    simulatorControls = { ...simulatorControls, [key]: value };
+    syncSimulatorControlUi(key);
+    scheduleSimulatorProjection();
+  }
+
+  function resetSimulatorToBaseline() {
+    if (!simulatorBaseline) return;
+    simulatorControls = S.resetSimulatorControls(simulatorBaseline);
+    Object.keys(simulatorControls).forEach((key) => syncSimulatorControlUi(key));
+    closeSimulatorInfo();
+    scheduleSimulatorProjection();
   }
 
   function setProcessing(active, update = {}) {
@@ -371,6 +658,7 @@
     pensionReportState = stateFromExtraction(extraction);
     projection = null;
     userCorrections = {};
+    resetSimulatorState();
     renderReview();
     showStep(2);
   }
@@ -419,6 +707,7 @@
     projection = null;
     yearsUntilRetirement = null;
     userCorrections = {};
+    resetSimulatorState();
     $('pensionReportFile').value = '';
     $('pensionReportStatus').textContent = 'לא נבחר קובץ';
     $('yearsUntilRetirement').value = '';
@@ -462,7 +751,9 @@
     if (!validateReview()) { showStep(2); return; }
     try {
       yearsUntilRetirement = years;
-      projection = E.projectBaseline(pensionReportState, yearsUntilRetirement, DEFAULT_ASSUMPTIONS);
+      resetSimulatorState();
+      initializeSimulator();
+      projection = simulatorBaseline.projection;
       renderForecast();
       showStep(4);
     } catch (error) {
@@ -471,6 +762,7 @@
   });
   $('editYears').addEventListener('click', () => showStep(3));
   $('startOver').addEventListener('click', resetFlow);
+  $('resetSimulator').addEventListener('click', resetSimulatorToBaseline);
   document.querySelectorAll('[data-money-mode]').forEach((button) => button.addEventListener('click', () => {
     moneyMode = button.dataset.moneyMode === 'nominal' ? 'nominal' : 'real';
     renderForecast();
@@ -480,6 +772,9 @@
   markCorrection('depositFee', 'depositFee');
   markCorrection('balanceFee', 'balanceFee');
   $('yearsUntilRetirement').addEventListener('input', () => { $('yearsError').textContent = ''; $('yearsUntilRetirement').classList.remove('invalid'); });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeSimulatorInfo();
+  });
 
   const restored = loadSession();
   if (restored) {
@@ -496,6 +791,9 @@
     getSelectedDocument(kind) { return kind === 'pensionReport' ? deepClone(selectedDocument) : null; },
     getPensionReportState() { return deepClone(pensionReportState); },
     getProjection() { return deepClone(projection); },
+    getSimulatorBaseline() { return deepClone(simulatorBaseline); },
+    getSimulatorControls() { return deepClone(simulatorControls); },
+    getSimulatorComparison() { return deepClone(simulatorComparison); },
     getFlowStep() { return flowStep; },
     isReportProcessing() { return Boolean(processingController); },
     applyParsedText(text, method = 'pdf-text') {
@@ -514,13 +812,18 @@
       return deepClone(pensionReportState);
     },
     setPensionReportState(nextState) {
+      resetSimulatorState();
       pensionReportState = deepClone(nextState);
       selectedDocument = { status: 'partial', kind: D.SOURCES.PENSION_REPORT, pensionReportState: deepClone(nextState), fields: {} };
+      projection = null;
+      yearsUntilRetirement = null;
       renderReview();
       showStep(2);
     },
     setYearsUntilRetirement(years) { $('yearsUntilRetirement').value = String(years); },
     calculateForecast() { $('calculateForecast').click(); return deepClone(projection); },
+    setSimulatorControl(key, value) { setSimulatorControlValue(key, value, { snap: false }); return deepClone(simulatorControls); },
+    resetSimulator: resetSimulatorToBaseline,
     reset: resetFlow,
   });
 })();

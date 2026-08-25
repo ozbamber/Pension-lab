@@ -1,5 +1,14 @@
 # יומן שינויים
 
+## Interactive Pension What-If Simulator (PR2) — 2026-08-25
+
+- Added an immutable baseline/selected-scenario layer that reuses the existing projection engine. At untouched controls, 6.08% nominal return with 2% inflation maps back to the unchanged 4% real PR1 baseline.
+- Added one compact RTL simulator below the central projection with five live slider tracks: nominal return, inflation, either total contribution rate or amount-only fallback, deposit fee, and balance fee. All controls update the same combined result and retain a fixed baseline marker.
+- Added a central real/nominal comparison that keeps baseline and signed delta in the same money basis, a global reset to exact baseline, semantic range status for assistive technology, keyboard slider support, and responsive information popovers/bottom sheets.
+- Added local reviewed source metadata for the Bank of Israel inflation target, contribution context, management-fee distinctions, selected-fund references, and the return-assurance mechanism. No source is fetched at runtime.
+- Preserved the PR1 parser, OCR, fund-type routing, contribution-history logic, source identity, and Dataset v2 ground truth without changes.
+- Added 26 deterministic simulator-engine tests and a Chromium simulator browser test covering supported/blocked routes, all controls, combined changes, reset, real/nominal, information UI, no control persistence, no interaction network request, and 390px overflow.
+
 ## Reliability and physical-source identity safety — 2026-08-24
 
 - Restricted missing-total derivation so three observed components can clear only a missing-total completeness issue. Any unrelated parser, salary, plausibility, OCR-conflict, or source-identity issue keeps the row review-only; a diagnostic total may still be shown.

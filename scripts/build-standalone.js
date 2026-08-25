@@ -11,6 +11,8 @@ const scriptNames = [
   'pension-report-parser.js',
   'local-document-pipeline.js',
   'document-extraction.js',
+  'simulator-config.js',
+  'simulator.js',
   'app.js',
 ];
 

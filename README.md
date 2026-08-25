@@ -1,6 +1,6 @@
 # Pension Lab
 
-Pension Lab is a static, client-side Hebrew RTL pension planning tool. Its PR1 journey is pension-report-first: upload one annual or quarterly pension report, review the extracted pension state, enter years until retirement, and receive one transparent baseline forecast. Document processing stays in the browser and uses locally bundled PDF.js and Tesseract assets; there is no document backend or cloud OCR.
+Pension Lab is a static, client-side Hebrew RTL pension planning tool. Its report-first journey is: upload one annual or quarterly pension report, review the extracted pension state, enter years until retirement, receive one transparent baseline forecast, and optionally explore one compact combined what-if scenario. Document processing stays in the browser and uses locally bundled PDF.js and Tesseract assets; there is no document backend or cloud OCR.
 
 The normal product flow does not require a payslip, date of birth, current age, retirement age, gross salary, or manually entered contribution rates. Historical payslip parser modules remain isolated in the repository for regression coverage, but the running application does not load or depend on them.
 
@@ -46,11 +46,12 @@ npm run build
 npm run test:browser:ocr
 npm run test:browser:standalone
 npm run test:browser:smoke
+npm run test:browser:simulator
 ```
 
 Node.js 22+ and Chromium/Chrome are required for browser suites. Set `CHROMIUM_PATH` if the executable is not discoverable.
 
-The suites cover the projection engine, normalized pension-report state, complete contribution history, arithmetic and ambiguity rules, OCR normalization, the generated standalone artifact, local-only privacy behavior, cancellation, refresh persistence, exact forecast horizons, and desktop/mobile overflow.
+The suites cover the projection engine, immutable simulator scenarios, normalized pension-report state, complete contribution history, arithmetic and ambiguity rules, OCR normalization, the generated standalone artifact, local-only privacy behavior, cancellation, refresh persistence, exact forecast horizons, central real/nominal comparisons, and desktop/mobile overflow.
 
 ## Pension-report model
 
@@ -63,7 +64,9 @@ Annual and quarterly reports use one semantic parser. It extracts balance, perso
 - Files and raw extracted text remain local to the active browser processing session.
 - Contributions are modeled gross; deposit and balance fees remain separate for accounting consistency.
 - The recurring pension deposit remains constant in real terms, and `yearsUntilRetirement × 12` determines the projection horizon exactly.
-- Interactive what-if controls and scenario comparison are deferred to PR2.
+- PR2 keeps an immutable PR1 baseline and a separate session-only selected scenario. It exposes nominal return, inflation, either a safe contribution-rate/amount fallback, and two fee controls; it uses the same projection engine and never uploads or persists what-if choices.
+- The 6.08% nominal default is the exact equivalent of the visible 4% real return and 2% inflation baseline. Green slider ranges are comparison context, not a statement that an outcome is good.
+- Saved scenarios, salary growth, career breaks, investment allocation, retirement-age Explorer, coefficient controls, and personalized optimization remain deferred.
 - Taxes, benefit eligibility, provider-specific product rules, and stochastic simulation are outside the current model.
 
 See [docs/QA.md](docs/QA.md), [docs/SOURCES.md](docs/SOURCES.md), and [docs/THIRD_PARTY_NOTICES.md](docs/THIRD_PARTY_NOTICES.md) for evidence and dependencies.
