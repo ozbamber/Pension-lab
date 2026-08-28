@@ -146,8 +146,15 @@
     </section>
 
     <section id="forecastStep" class="flow-step forecast-step hidden" aria-labelledby="forecastTitle">
+      <aside id="demoBanner" class="demo-banner hidden" aria-label="מצב הדגמה עם נתונים סינתטיים">
+        <div>
+          <strong>מצב הדגמה <span>· נתונים סינתטיים</span></strong>
+          <small>הנתונים במסך זה נוצרו לצורך בדיקת המחשבון בלבד.</small>
+        </div>
+        <a id="exitDemo" href="./">יציאה מהדגמה</a>
+      </aside>
       <div class="section-heading result-heading">
-        <span class="eyebrow">שלב 4 · תחזית בסיסית</span>
+        <span id="forecastEyebrow" class="eyebrow">שלב 4 · תחזית בסיסית</span>
         <h1 id="forecastTitle">זו נקודת הפתיחה שלך</h1>
         <p id="forecastModeDescription">הסכומים מוצגים בשקלים של היום.</p>
       </div>
@@ -198,6 +205,7 @@
   <script src="engine.js?v=20260823-report-first"></script>
   <script src="financial-normalizer.js?v=20260823-report-first"></script>
   <script src="pension-report-parser.js?v=20260823-report-first"></script>
+  <script src="demo-fixture.js?v=20260828-demo"></script>
   <script src="local-document-pipeline.js?v=20260823-report-first"></script>
   <script src="document-extraction.js?v=20260823-report-first"></script>
   <script src="simulator-config.js?v=20260825-pr2"></script>

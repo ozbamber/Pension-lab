@@ -4,12 +4,14 @@
   const E = window.PensionEngine;
   const D = window.PensionDocuments;
   const R = window.PensionReportParser;
+  const DEMO = window.PensionDemo;
   const S = window.PensionSimulator;
   const C = window.PensionSimulatorConfig;
-  if (!E || !D || !R || !S || !C) throw new Error('Pension Lab dependencies are missing.');
+  if (!E || !D || !R || !DEMO || !S || !C) throw new Error('Pension Lab dependencies are missing.');
 
   const SESSION_KEY = 'pension-lab-report-first-session-v1';
   const DEFAULT_ASSUMPTIONS = C.BASELINE;
+  const demoMode = DEMO.isDemoMode();
   const volatileStorage = new Map();
   const $ = (id) => document.getElementById(id);
 
@@ -80,7 +82,9 @@
   }
 
   function formatPercentRatio(value, digits = 2) {
-    return Number.isFinite(Number(value)) ? `${(Number(value) * 100).toFixed(digits).replace(/\.00$/, '')}%` : '—';
+    if (!Number.isFinite(Number(value))) return '—';
+    const fixed = (Number(value) * 100).toFixed(digits);
+    return `${fixed.replace(/(?:\.0+|(?<=\.\d*[1-9])0+)$/, '')}%`;
   }
 
   function escapeHtml(value) {
@@ -131,7 +135,7 @@
   }
 
   function persistSession() {
-    if (!pensionReportState) return;
+    if (demoMode || !pensionReportState) return;
     const payload = {
       version: 1,
       flowStep,
@@ -144,6 +148,7 @@
   }
 
   function loadSession() {
+    if (demoMode) return false;
     const raw = storageGet(SESSION_KEY);
     if (!raw) return false;
     try {
@@ -701,6 +706,10 @@
   }
 
   function resetFlow() {
+    if (demoMode) {
+      window.location.assign(DEMO.demoExitUrl(window.location.href));
+      return;
+    }
     if (processingController) processingController.abort();
     selectedDocument = null;
     pensionReportState = null;
@@ -714,6 +723,25 @@
     storageRemove(SESSION_KEY);
     $('sessionRestoreNotice').classList.add('hidden');
     showStep(1, { skipPersist: true });
+  }
+
+  function initializeDemoMode() {
+    document.body.classList.add('demo-mode');
+    pensionReportState = DEMO.createDemoPensionReportState();
+    yearsUntilRetirement = DEMO.getDemoYears();
+    moneyMode = 'real';
+    userCorrections = {};
+    selectedDocument = null;
+    resetSimulatorState();
+    initializeSimulator();
+    projection = simulatorBaseline.projection;
+    $('yearsUntilRetirement').value = String(yearsUntilRetirement);
+    $('demoBanner').classList.remove('hidden');
+    $('exitDemo').href = DEMO.demoExitUrl(window.location.href);
+    $('forecastEyebrow').textContent = 'תחזית הדגמה';
+    $('forecastTitle').textContent = 'נקודת פתיחה סינתטית';
+    renderForecast();
+    showStep(4, { skipPersist: true, skipScroll: true, instant: true });
   }
 
   $('pensionReportFile').addEventListener('change', handleReportSelection);
@@ -776,15 +804,19 @@
     if (event.key === 'Escape') closeSimulatorInfo();
   });
 
-  const restored = loadSession();
-  if (restored) {
-    renderReview();
-    if (yearsUntilRetirement) $('yearsUntilRetirement').value = String(yearsUntilRetirement);
-    if (projection) renderForecast();
-    showStep(flowStep, { skipPersist: true, skipScroll: true, instant: true });
-    $('sessionRestoreNotice').classList.remove('hidden');
+  if (demoMode) {
+    initializeDemoMode();
   } else {
-    showStep(1, { skipPersist: true, skipScroll: true, instant: true });
+    const restored = loadSession();
+    if (restored) {
+      renderReview();
+      if (yearsUntilRetirement) $('yearsUntilRetirement').value = String(yearsUntilRetirement);
+      if (projection) renderForecast();
+      showStep(flowStep, { skipPersist: true, skipScroll: true, instant: true });
+      $('sessionRestoreNotice').classList.remove('hidden');
+    } else {
+      showStep(1, { skipPersist: true, skipScroll: true, instant: true });
+    }
   }
 
   window.PensionLabTest = Object.freeze({
@@ -795,6 +827,7 @@
     getSimulatorControls() { return deepClone(simulatorControls); },
     getSimulatorComparison() { return deepClone(simulatorComparison); },
     getFlowStep() { return flowStep; },
+    isDemoMode() { return demoMode; },
     isReportProcessing() { return Boolean(processingController); },
     applyParsedText(text, method = 'pdf-text') {
       const parsed = R.parsePensionReport(String(text || ''), { method });

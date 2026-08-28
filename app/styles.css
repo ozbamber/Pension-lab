@@ -9,6 +9,9 @@
   --green-light: #dcebe4;
   --mint: #a9d3c2;
   --ochre: #d39b48;
+  --range-central: #4f9b70;
+  --range-moderate: #c9a76b;
+  --range-extreme: #cbbfae;
   --danger: #a13f35;
   --danger-soft: #f8e7e1;
   --line: #d8d4c8;
@@ -46,6 +49,7 @@ button { color: inherit; }
 button:focus-visible,
 input:focus-visible,
 summary:focus-visible,
+.demo-banner a:focus-visible,
 .upload-button:focus-within {
   outline: 3px solid rgba(211, 155, 72, 0.48);
   outline-offset: 3px;
@@ -142,6 +146,47 @@ summary:focus-visible,
   font-size: 0.86rem;
   font-weight: 700;
 }
+
+.demo-banner {
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  color: var(--green-dark);
+  background: rgba(220, 235, 228, 0.72);
+  border: 1px solid rgba(29, 102, 86, 0.24);
+  border-inline-start: 4px solid var(--green);
+  border-radius: 14px;
+}
+
+.demo-banner strong,
+.demo-banner small { display: block; }
+.demo-banner > div { min-width: 0; }
+.demo-banner strong { font-size: 0.88rem; }
+.demo-banner strong span { color: var(--green); }
+.demo-banner small { margin-top: 1px; color: var(--ink-soft); font-size: 0.72rem; }
+.demo-banner a {
+  min-height: 40px;
+  flex: 0 0 auto;
+  padding: 9px 13px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--green-dark);
+  border: 1px solid rgba(29, 102, 86, 0.3);
+  border-radius: 999px;
+  text-decoration: none;
+  font-size: 0.76rem;
+  font-weight: 820;
+}
+.demo-banner a:hover { color: var(--white); background: var(--green-dark); }
+
+body.demo-mode .flow-progress,
+body.demo-mode .forecast-step > .step-actions { display: none; }
+body.demo-mode .app-shell { padding-top: 18px; }
+body.demo-mode .result-heading { margin-bottom: 20px; }
+body.demo-mode .result-heading h1 { font-size: clamp(2rem, 4vw, 3.2rem); }
 
 .flow-progress {
   width: min(650px, 100%);
@@ -869,7 +914,7 @@ input.invalid { border-color: var(--danger) !important; }
   height: 7px;
   flex: 0 0 auto;
   border-radius: 999px;
-  background: linear-gradient(to right, #bf6151, var(--ochre) 22%, #4b9870 42%, #4b9870 58%, var(--ochre) 78%, #bf6151);
+  background: linear-gradient(to right, var(--range-extreme), var(--range-moderate) 22%, var(--range-central) 42%, var(--range-central) 58%, var(--range-moderate) 78%, var(--range-extreme));
 }
 
 .simulator-controls { margin-top: 17px; }
@@ -946,12 +991,12 @@ input.invalid { border-color: var(--danger) !important; }
   border: 0;
   border-radius: 999px;
   background: linear-gradient(to right,
-    #bd6251 0%,
-    var(--ochre) var(--moderate-start),
-    #4f9b70 var(--central-start),
-    #4f9b70 var(--central-end),
-    var(--ochre) var(--moderate-end),
-    #bd6251 100%);
+    var(--range-extreme) 0%,
+    var(--range-moderate) var(--moderate-start),
+    var(--range-central) var(--central-start),
+    var(--range-central) var(--central-end),
+    var(--range-moderate) var(--moderate-end),
+    var(--range-extreme) 100%);
 }
 
 .simulator-range::-webkit-slider-runnable-track { height: 8px; background: transparent; border-radius: 999px; }
@@ -1168,6 +1213,9 @@ input.invalid { border-color: var(--danger) !important; }
   .brand small { display: none; }
   .money-mode button { padding: 7px 9px; font-size: 0.7rem; }
   .app-shell { padding-top: 20px; }
+  body.demo-mode .app-shell { padding-top: 14px; }
+  .demo-banner { align-items: flex-start; gap: 12px; }
+  .demo-banner a { min-height: 44px; }
   .flow-progress { margin-bottom: 30px; }
   .flow-progress li b { font-size: 0.66rem; }
   .hero-copy h1 { font-size: clamp(2.3rem, 12vw, 3.5rem); }
@@ -1234,6 +1282,9 @@ input.invalid { border-color: var(--danger) !important; }
   .app-shell { width: calc(100% - 22px); }
   .brand-mark { width: 38px; height: 38px; }
   .brand strong { font-size: 1.05rem; }
+  .demo-banner { padding: 11px 12px; flex-wrap: wrap; }
+  .demo-banner small { max-width: 230px; }
+  .demo-banner a { padding-inline: 10px; }
   .money-mode { max-width: 190px; }
   .money-mode button { padding: 6px 8px; line-height: 1.15; }
   .flow-progress ol::before { right: 10%; left: 10%; }

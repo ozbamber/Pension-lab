@@ -135,8 +135,8 @@
       centralMax: 0.2183,
       moderateMin: 0.17,
       moderateMax: 0.23,
-      tickDigits: 0,
-      valueDigits: 1,
+      tickDigits: 2,
+      valueDigits: 2,
       sourceIds: ['pensionContributions'],
       info: {
         title: 'שיעור ההפקדה לפנסיה',
@@ -181,7 +181,7 @@
       centralMax: 0.025,
       moderateMin: 0.0025,
       moderateMax: 0.035,
-      tickDigits: 0,
+      tickDigits: 1,
       valueDigits: 2,
       sourceIds: ['pensionFeeCaps', 'selectedFunds'],
       info: {
@@ -204,7 +204,7 @@
       centralMax: 0.003,
       moderateMin: 0.0002,
       moderateMax: 0.0045,
-      tickDigits: 0,
+      tickDigits: 2,
       valueDigits: 2,
       sourceIds: ['pensionFeeCaps', 'selectedFunds'],
       info: {

@@ -9,6 +9,7 @@ const scriptNames = [
   'engine.js',
   'financial-normalizer.js',
   'pension-report-parser.js',
+  'demo-fixture.js',
   'local-document-pipeline.js',
   'document-extraction.js',
   'simulator-config.js',

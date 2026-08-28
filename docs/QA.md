@@ -1,13 +1,13 @@
 # QA status
 
-Reviewed: **2026-08-25**.
+Reviewed: **2026-08-28**.
 
-This review covers the PR2 Interactive Pension What-If Simulator on `codex/pr2-interactive-simulator`, based directly on reviewed PR1 safety SHA `f7978fe1a15c8e2f738ec0de629e77ff736ceabb`. The product accepts one annual or quarterly pension report, requires trusted `new_pension` routing and one years-until-retirement answer, and then exposes a session-only what-if simulator using the unchanged projection engine. PR1 extraction architecture and Dataset v2 ground truth remain frozen.
+This review covers the PR2 Interactive Pension What-If Simulator plus its query-only synthetic demo on `codex/pr2-interactive-simulator`, based directly on reviewed PR1 safety SHA `f7978fe1a15c8e2f738ec0de629e77ff736ceabb`. The normal product accepts one annual or quarterly pension report, requires trusted `new_pension` routing and one years-until-retirement answer, and then exposes a session-only what-if simulator using the unchanged projection engine. `?demo=1` constructs a clearly labeled synthetic post-extraction state and enters those same simulator APIs for product review. PR1 extraction architecture and Dataset v2 ground truth remain frozen.
 
 ## Completed suites
 
 - `npm run test:engine`: **23/23** projection-engine tests passed.
-- `npm run test:simulator`: **26/26** immutable what-if scenario, nominal/real conversion, reset, contribution, fee, range-status, and safe-routing tests passed.
+- `npm run test:simulator`: **26/26** immutable what-if scenario tests plus **10/10** synthetic-demo fixture, normalization, exact-value, production-equivalence, immutability, query, horizon, and exit-URL tests passed.
 - `npm run test:documents`: **10/10** document-model tests passed.
 - `npm run test:ocr`: **30/30** financial/spatial parser tests passed.
 - `npm run test:pension`: **24/24** legacy pension-report/reconciliation regressions, **14/14** pension-report-state acceptance tests, **24/24** Engine V2 table regressions, and **32/32** fund-routing/source-safety regressions passed.
@@ -18,17 +18,32 @@ This review covers the PR2 Interactive Pension What-If Simulator on `codex/pr2-i
 - `npm run dataset:benchmark:compare -- --before-ref 2a6f05b8a0d38830da5ecc606dd124b99ba6ebf6`: extraction field/critical/validation metrics remained **88.2% / 96.0% / 100.0%** while the new routing contract made all **21/21** supported-new parents eligible for safe automatic acceptance.
 - `npm run test:browser:smoke`: old-pension blocking and unknown-fund confirmation passed; the complete report-only flow also passed at **1440×1000** and **390×844**, including exact 144-month projection for 12 years, real/nominal switching, no payslip or age fields, and no horizontal overflow.
 - `npm run test:browser:simulator`: supported-new gating, all five controls, combined changes, fixed baseline markers, global reset, positive/negative deltas, real/nominal consistency, keyboard interaction, desktop information UI, mobile tap information UI, session-only state, no interaction network request, and 390px overflow checks passed.
+- `npm run test:browser:demo`: **38/38** normal/demo routing, canonical fixture, all controls, combined scenarios, positive/negative/stress deltas, reset, accessible information UI, session isolation, exit/restore, no local/IndexedDB storage, no interaction network request, LTR numeric direction, and 1440×1000/390×844 checks passed.
 - `npm run test:browser:ocr`: **5/5** native-report, local OCR, privacy/session, mobile-overflow, and cancellation groups passed.
-- `npm run test:browser:standalone`: **4/4** generated-artifact groups passed, including 10 local vendor URLs, native report parsing, scanned report OCR, and zero 404/console/runtime/network-loading errors.
-- `npm run build`: generated **221 files** from canonical `app/`, including `dist/pension-lab-he-standalone.html`; two consecutive builds produced identical SHA256 `7DEEE94D513A689CAEF63ED93F30129375D5674BCEB54BA997D856D7CA5441F8`.
-- `npm run check:standalone`: **8/8** authored inline script blocks passed syntax validation.
-- `node --check` over `app/`, `scripts/`, and `tests/`: **39/39** JavaScript files passed syntax validation.
+- `npm run test:browser:standalone`: **6/6** generated-artifact groups passed, including 10 local vendor URLs, source-equivalent demo and normal routes, native report parsing, scanned report OCR, and zero 404/console/runtime/network-loading errors.
+- `npm run build`: generated **222 files** from canonical `app/`, including `dist/pension-lab-he-standalone.html`; two consecutive builds produced identical SHA256 `9F69BF50E85C8AB887A46E0E95A5BBCD3BB0D5BB75335F516680D59A710DC0DD`.
+- `npm run check:standalone`: **9/9** authored inline script blocks passed syntax validation.
+- `node --check` over `app/`, `scripts/`, and `tests/`: **42/42** JavaScript files passed syntax validation, including the unchanged vendored JavaScript already covered by the previous count.
 
 ## PR2 visual and interaction review
 
 - Chromium visual inspection at **1440×1000** confirmed one integrated central result above one compact RTL simulator, five physical LTR range tracks, a fixed dark baseline marker, a distinct selection thumb, and no scattered projection cards.
 - Chromium visual inspection at **390×844** confirmed one-column layout, no horizontal overflow, 44px information targets, enlarged slider thumbs, central result above the controls, and an accessible fixed information bottom sheet.
 - Desktop hover/focus/click information behavior, mobile tap behavior, Escape/close behavior, keyboard adjustment, exact global reset, real/nominal switching, combined-control updates, and zero interaction network requests are covered by the browser suite.
+- Demo screenshots at **1440×1000** and **390×844** confirmed a modest synthetic-data banner, central-result dominance, exact fee/contribution ticks, subtle neutral extreme ranges, fixed baseline markers, separate selected thumbs, 44px mobile information targets, and no horizontal overflow.
+
+## Synthetic demo verification
+
+- Activation is URL-only: `?demo=1`. Without that query, the application opens the unchanged upload flow with no visible demo banner, fake provider, synthetic value, or automatic navigation.
+- The fixture is a supported `new_pension` annual state with balance **₪250,000**, salary **₪24,500**, deposit fee **0.8%**, balance fee **0.15%**, and 12 reliable monthly rows for 01/2025–12/2025.
+- Each row contains employee **₪1,470** (6%), employer **₪1,592.50** (6.5%), severance **₪2,040.85** (8.33%), and total **₪5,103.35** (20.83%). The production contribution normalizer derives 12 used months, the same salary, and the same monthly baseline.
+- Default horizon is **25 years / 300 months**; return is **6.08% nominal = 4% real at 2% inflation**; coefficient remains **200**. The untouched demo controls equal `projectBaseline()` exactly.
+- Optimistic scenario (8%, 2%, 21.83%, 0.5%, 0.10%): real monthly pension **₪22,621**, real retirement balance **₪4,524,195**, deltas **+₪6,747 / +₪1,349,322**.
+- Conservative scenario (4%, 3%, 18.5%, 2%, 0.30%): real monthly pension **₪8,746**, real retirement balance **₪1,749,114**, deltas **−₪7,129 / −₪1,425,758**.
+- Extreme stress (2%, 10%, 15%, 6%, 2%): implied real return **−7.2727%**, real monthly pension **₪2,090**, real retirement balance **₪417,945**, deltas **−₪13,785 / −₪2,756,928**; all outputs stayed finite.
+- Mixed high-return/low-contribution/high-fee scenario produced real monthly pension **₪11,696** and real retirement balance **₪2,339,194**, distinct from the return-only result and confirming one combined projection.
+- A seeded normal session remained byte-for-byte unchanged throughout demo startup, slider/money-mode interaction, mobile reload, and exit. After “יציאה מהדגמה”, the prior 12-year normal forecast restored successfully.
+- Instrumented Chromium observed zero demo session writes/removals, zero local-storage writes/removals, zero IndexedDB opens, and zero network requests caused by demo interaction.
 
 ## Product-flow verification
 

@@ -23,6 +23,8 @@ python -m http.server 8080 --directory app
 
 Then open `http://127.0.0.1:8080/`.
 
+For a review-only synthetic simulator, open `http://127.0.0.1:8080/?demo=1`. Demo mode is activated only by this query parameter, bypasses document upload/OCR, is visibly labeled as synthetic, and keeps its pension state and simulator choices in memory only. It does not read, replace, or delete a normal same-tab session; leaving demo mode restores the ordinary product route.
+
 ## Build
 
 ```bash
@@ -47,6 +49,7 @@ npm run test:browser:ocr
 npm run test:browser:standalone
 npm run test:browser:smoke
 npm run test:browser:simulator
+npm run test:browser:demo
 ```
 
 Node.js 22+ and Chromium/Chrome are required for browser suites. Set `CHROMIUM_PATH` if the executable is not discoverable.
@@ -65,6 +68,7 @@ Annual and quarterly reports use one semantic parser. It extracts balance, perso
 - Contributions are modeled gross; deposit and balance fees remain separate for accounting consistency.
 - The recurring pension deposit remains constant in real terms, and `yearsUntilRetirement × 12` determines the projection horizon exactly.
 - PR2 keeps an immutable PR1 baseline and a separate session-only selected scenario. It exposes nominal return, inflation, either a safe contribution-rate/amount fallback, and two fee controls; it uses the same projection engine and never uploads or persists what-if choices.
+- `?demo=1` constructs a fresh canonical synthetic `new_pension` state after parsing, applies a 25-year horizon, and enters the same simulator APIs and gating path. It never creates a PDF, invokes OCR, or uses browser persistence.
 - The 6.08% nominal default is the exact equivalent of the visible 4% real return and 2% inflation baseline. Green slider ranges are comparison context, not a statement that an outcome is good.
 - Saved scenarios, salary growth, career breaks, investment allocation, retirement-age Explorer, coefficient controls, and personalized optimization remain deferred.
 - Taxes, benefit eligibility, provider-specific product rules, and stochastic simulation are outside the current model.

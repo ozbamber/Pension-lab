@@ -203,6 +203,41 @@ function assert(condition, message) {
     assert(vendorResults.every((item) => item.ok), `Required vendor assets did not resolve: ${JSON.stringify(vendorResults)}`);
     console.log(`✓ all ${requiredVendorPaths.length} standalone vendor URLs resolved from dist/vendor`);
 
+    await cdp.command('Page.navigate', { url: `${origin}/pension-lab-he-standalone.html?demo=1` });
+    await waitFor(() => evaluate(cdp, 'document.readyState === "complete" && Boolean(window.PensionLabTest) && window.PensionLabTest.isDemoMode() && window.PensionLabTest.getFlowStep() === 4'), 20000, 'standalone synthetic demo');
+    const standaloneDemo = await evaluate(cdp, `(() => {
+      const state = window.PensionLabTest.getPensionReportState();
+      const baseline = window.PensionLabTest.getSimulatorBaseline();
+      return {
+        bannerVisible: !document.querySelector('#demoBanner').classList.contains('hidden'),
+        balance: state.currentBalance,
+        contribution: state.derived.baselineMonthlyContribution,
+        years: baseline.yearsUntilRetirement,
+        months: baseline.monthsUntilRetirement,
+        controls: document.querySelectorAll('[data-simulator-input]').length,
+      };
+    })()`);
+    assert(standaloneDemo.bannerVisible && standaloneDemo.balance === 250000 && standaloneDemo.contribution === 5103.35 && standaloneDemo.years === 25 && standaloneDemo.months === 300 && standaloneDemo.controls === 5,
+      `Standalone demo fixture or routing mismatch: ${JSON.stringify(standaloneDemo)}`);
+    const requestsBeforeDemoInteraction = requests.length;
+    await evaluate(cdp, `(() => {
+      window.PensionLabTest.setSimulatorControl('nominalReturn', 0.08);
+      window.PensionLabTest.setSimulatorControl('contribution', 0.2183);
+    })()`);
+    await waitFor(() => evaluate(cdp, 'window.PensionLabTest.getSimulatorComparison().selectedNominalReturn === 0.08'), 5000, 'standalone demo interaction');
+    assert(requests.length === requestsBeforeDemoInteraction, 'Standalone demo interaction made a network request.');
+    console.log('✓ standalone ?demo=1 opened the memory-only five-track simulator and remained interactive');
+
+    await cdp.command('Page.navigate', { url: `${origin}/pension-lab-he-standalone.html` });
+    await waitFor(() => evaluate(cdp, 'document.readyState === "complete" && Boolean(window.PensionLabTest) && window.PensionLabTest.getFlowStep() === 1'), 20000, 'standalone normal flow after demo');
+    const normalAfterDemo = await evaluate(cdp, `({
+      demo: window.PensionLabTest.isDemoMode(),
+      bannerHidden: document.querySelector('#demoBanner').classList.contains('hidden'),
+      uploadVisible: !document.querySelector('#uploadStep').classList.contains('hidden')
+    })`);
+    assert(!normalAfterDemo.demo && normalAfterDemo.bannerHidden && normalAfterDemo.uploadVisible, `Standalone normal flow changed after demo: ${JSON.stringify(normalAfterDemo)}`);
+    console.log('✓ standalone without the query returned to the unchanged upload flow');
+
     await setFile(cdp, '#pensionReportFile', nativeFixture);
     await waitFor(async () => {
       const document = await evaluate(cdp, 'window.PensionLabTest.getSelectedDocument("pensionReport")');
@@ -234,7 +269,7 @@ function assert(condition, message) {
     assert(legacy.length === 0, `Standalone requested the removed legacy asset path: ${JSON.stringify(legacy)}`);
     assert(browserErrors.length === 0, `Standalone browser errors were reported: ${JSON.stringify(browserErrors.slice(0, 3))}`);
     console.log('✓ standalone emitted no 404, legacy-path, console, runtime or network-loading errors');
-    console.log('All 4 standalone document browser checks passed.');
+    console.log('All 6 standalone document browser checks passed.');
   } finally {
     if (cdp) cdp.close();
     chrome.kill();

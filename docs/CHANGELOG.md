@@ -1,5 +1,15 @@
 # יומן שינויים
 
+## Synthetic PR2 review mode and UI audit — 2026-08-28
+
+- Added an explicit query-only `?demo=1` review route. It creates a fresh canonical synthetic `new_pension` state with 12 reliable monthly rows, derives its contribution baseline through the production normalizer, fixes the horizon at 25 years by default, and enters the unchanged PR2 simulator APIs without PDF/OCR work.
+- Kept demo state fully memory-only: demo startup does not read or write the normal report session, simulator/money-mode interaction does not persist, no `localStorage` or IndexedDB is used, and “יציאה מהדגמה” returns to the normal route without deleting a pre-existing same-tab session.
+- Added a compact persistent synthetic-data banner, removed personal wording from the demo heading, hid unrelated flow chrome in demo only, and preserved the normal no-query upload route without a visible demo affordance.
+- Corrected misleading rounded fee-track labels so `0.5%–2.5%` and `0.05%–0.30%` remain visible, and replaced alarming red extreme-track treatment with a quieter neutral range while retaining non-color screen-reader status.
+- Added 10 fixture tests and 38 Chromium demo checks covering canonical values, production-engine equivalence, all five sliders, simultaneous changes, positive/negative/stress scenarios, reset, real/nominal display, persistence isolation, exit/restore, network privacy, LTR numeric direction inside RTL, and 1440px/390px layout.
+- Extended generated-standalone browser coverage to verify both `?demo=1` and the unchanged no-query flow. The build now contains 222 files and 9 inline script blocks; two consecutive builds produced SHA256 `9F69BF50E85C8AB887A46E0E95A5BBCD3BB0D5BB75335F516680D59A710DC0DD`.
+- Preserved `document-extraction.js`, `pension-report-parser.js`, Dataset v2 annotations/metrics, fund routing, OCR, confidence, and source-identity behavior byte-for-byte from the reviewed PR1 safety base.
+
 ## Interactive Pension What-If Simulator (PR2) — 2026-08-25
 
 - Added an immutable baseline/selected-scenario layer that reuses the existing projection engine. At untouched controls, 6.08% nominal return with 2% inflation maps back to the unchanged 4% real PR1 baseline.
