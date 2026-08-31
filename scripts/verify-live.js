@@ -31,6 +31,12 @@ async function request(relativePath) {
   return { url: response.url, response, bytes, text: bytes.toString('utf8') };
 }
 
+async function requestHead(relativePath) {
+  const url = new URL(relativePath, baseUrl);
+  const response = await fetch(url, { method: 'HEAD', redirect: 'manual', cache: 'no-store' });
+  return { url: response.url, response };
+}
+
 async function verifyAsset(relativePath, contentTypePattern, requiredText) {
   const live = await request(relativePath);
   const localPath = path.join(distRoot, relativePath.replace(/^\/+/, '').split('?')[0]);
@@ -42,7 +48,13 @@ async function verifyAsset(relativePath, contentTypePattern, requiredText) {
   const liveHash = sha256(live.bytes);
   assert(localHash === liveHash, `${relativePath} hash differs from the tested dist artifact`);
   if (requiredText) assert(live.text.includes(requiredText), `${relativePath} is missing its release marker`);
-  return { path: relativePath, status: live.response.status, contentType: live.response.headers.get('content-type'), sha256: liveHash };
+  return {
+    path: relativePath,
+    status: live.response.status,
+    contentType: live.response.headers.get('content-type'),
+    cacheControl: live.response.headers.get('cache-control'),
+    sha256: liveHash,
+  };
 }
 
 (async () => {
@@ -50,7 +62,7 @@ async function verifyAsset(relativePath, contentTypePattern, requiredText) {
   const index = await request('/');
   assert(index.response.status === 200, `/ returned HTTP ${index.response.status}`);
   assert(/text\/html/i.test(index.response.headers.get('content-type') || ''), '/ did not return HTML');
-  assert(index.text.includes('20260831-audit'), '/ does not contain the audited asset version');
+  assert(index.text.includes('20260831-ocr'), '/ does not contain the OCR performance asset version');
   assert(sha256(index.bytes) === sha256(fs.readFileSync(path.join(distRoot, 'index.html'))), '/ differs from dist/index.html');
 
   const expectedHeaders = {
@@ -72,6 +84,27 @@ async function verifyAsset(relativePath, contentTypePattern, requiredText) {
   assets.push(await verifyAsset('/simulator.js', /(?:application|text)\/javascript/i, 'snapToStep'));
   assets.push(await verifyAsset('/demo-fixture.js', /(?:application|text)\/javascript/i, 'PensionDemo'));
   assets.push(await verifyAsset('/styles.css', /text\/css/i, 'simulator-range-status'));
+  assets.push(await verifyAsset('/local-document-pipeline.js', /(?:application|text)\/javascript/i, 'awaitWithAbort'));
+  assets.push(await verifyAsset('/document-extraction.js', /(?:application|text)\/javascript/i, 'ocrProgressStart'));
+
+  const ocrAssets = [];
+  const legacyOcrRedirects = [];
+  for (const language of ['heb', 'eng']) {
+    const ocrAssetPath = `/vendor/tessdata/best-d18b4db5-ed350f37/${language}.traineddata.gz`;
+    const ocrAsset = await verifyAsset(ocrAssetPath, /application\/(?:gzip|x-gzip|octet-stream)/i);
+    const ocrCacheControl = ocrAsset.cacheControl || '';
+    assert(/(?:^|,)\s*public(?:,|$)/i.test(ocrCacheControl), `${language} OCR language asset is not publicly cacheable`);
+    assert(/(?:^|,)\s*max-age=31536000(?:,|$)/i.test(ocrCacheControl), `${language} OCR language asset is missing its one-year browser cache policy`);
+    assert(/(?:^|,)\s*immutable(?:,|$)/i.test(ocrCacheControl), `Versioned ${language} OCR language asset is not immutable`);
+    ocrAssets.push(ocrAsset);
+
+    const legacyPath = `/vendor/tessdata/${language}.traineddata.gz`;
+    const legacyOcrAsset = await requestHead(legacyPath);
+    const legacyLocation = legacyOcrAsset.response.headers.get('location') || '';
+    assert(legacyOcrAsset.response.status === 302, `Legacy ${language} OCR language path returned HTTP ${legacyOcrAsset.response.status} instead of 302`);
+    assert(new URL(legacyLocation, baseUrl).pathname === ocrAssetPath, `Legacy ${language} OCR language path does not redirect to the fingerprinted asset`);
+    legacyOcrRedirects.push({ path: legacyPath, status: legacyOcrAsset.response.status, location: legacyLocation });
+  }
 
   const demoShell = await request('/?demo=1');
   assert(demoShell.response.status === 200 && demoShell.text.includes('demo-fixture.js'), 'Demo route did not return the audited application shell');
@@ -88,6 +121,8 @@ async function verifyAsset(relativePath, contentTypePattern, requiredText) {
     baseUrl: baseUrl.href,
     indexSha256: sha256(index.bytes),
     headers: Object.fromEntries(['x-content-type-options', 'x-frame-options', 'referrer-policy', 'permissions-policy'].map((name) => [name, index.response.headers.get(name)])),
+    ocrAssets,
+    legacyOcrRedirects,
     assets,
     missingAsset: { status: missing.response.status, sha256: sha256(missing.bytes) },
   }, null, 2));

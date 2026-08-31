@@ -744,15 +744,38 @@
       const tableRowTexts = [];
       const tableRowConfidences = [];
       const tableRowSources = [];
+      const ocrProgressStart = 0.42;
+      const ocrProgressEnd = 0.98;
+      const pageProgress = (rangeStart, rangeEnd, pageNumber, fraction = 0) => {
+        const pageIndex = Math.max(0, Number(pageNumber) - 1);
+        const normalizedFraction = Math.max(0, Math.min(1, Number(fraction) || 0));
+        return rangeStart + ((pageIndex + normalizedFraction) / Math.max(1, maxPages)) * (rangeEnd - rangeStart);
+      };
+      const progressContext = (pageNumber, start, end, stage, stageLabel) => ({
+        start: pageProgress(ocrProgressStart, ocrProgressEnd, pageNumber, start),
+        end: pageProgress(ocrProgressStart, ocrProgressEnd, pageNumber, end),
+        pageCount: maxPages,
+        stage,
+        stageLabel,
+      });
       try {
         for (let pageNumber = 1; pageNumber <= maxPages; pageNumber += 1) {
           L.throwIfAborted(options.signal);
-          if (typeof options.onProgress === 'function') options.onProgress({ phase: 'rendering', pageNumber, pageCount: maxPages });
+          if (typeof options.onProgress === 'function') options.onProgress({
+            phase: 'rendering', pageNumber, pageCount: maxPages,
+            overallProgress: pageProgress(ocrProgressStart, ocrProgressEnd, pageNumber, 0),
+          });
           const canvas = await L.renderPage(pdf, pageNumber, { signal: options.signal });
           const coarseDimensions = { width: canvas.width, height: canvas.height };
           let coarsePageResult = null;
           try {
-            coarsePageResult = await ocr.recognize(canvas, pageNumber, { psm: 3, dpi: 300 });
+            coarsePageResult = await ocr.recognize(canvas, pageNumber, {
+              psm: 3,
+              dpi: 300,
+              progressContext: progressContext(
+                pageNumber, 0.02, kind === SOURCES.PENSION_REPORT ? 0.24 : 0.98, 'coarse', 'סריקה ראשונית',
+              ),
+            });
             ocrPages.push(coarsePageResult);
           } finally {
             L.releaseCanvas(canvas);
@@ -761,8 +784,20 @@
             const highResolution = await L.renderPage(pdf, pageNumber, { signal: options.signal, scale: 3.2, maxScale: 3.4, maxDimension: 4200 });
             const enhanced = L.prepareOcrCanvas(highResolution, { grayscale: true, contrast: 1.35 });
             try {
-              enhancedOcrPages.push(await ocr.recognize(enhanced, pageNumber, { psm: 6, dpi: 300 }));
-              sparseOcrPages.push(await ocr.recognize(enhanced, pageNumber, { psm: 11, dpi: 300 }));
+              enhancedOcrPages.push(await ocr.recognize(enhanced, pageNumber, {
+                psm: 6,
+                dpi: 300,
+                progressContext: progressContext(
+                  pageNumber, 0.24, 0.44, 'enhanced', 'קריאה מחודדת',
+                ),
+              }));
+              sparseOcrPages.push(await ocr.recognize(enhanced, pageNumber, {
+                psm: 11,
+                dpi: 300,
+                progressContext: progressContext(
+                  pageNumber, 0.44, 0.6, 'sparse', 'איתור טקסט מפוזר',
+                ),
+              }));
               const numericRegion = L.detectNumericTableRegion(coarsePageResult, coarseDimensions.width, coarseDimensions.height);
               const scaledNumericRegion = numericRegion ? {
                 x: numericRegion.x * highResolution.width / coarseDimensions.width,
@@ -783,22 +818,46 @@
               const tableCanvas = tableCrop ? L.prepareOcrCanvas(tableCrop, { grayscale: true, contrast: 1.18 }) : null;
               if (tableCanvas) {
                 try {
-                  tableOcrPages.push(await ocr.recognize(tableCanvas, pageNumber, { psm: 6, dpi: 300 }));
+                  tableOcrPages.push(await ocr.recognize(tableCanvas, pageNumber, {
+                    psm: 6,
+                    dpi: 300,
+                    progressContext: progressContext(
+                      pageNumber, 0.6, 0.72, 'table', 'קריאת טבלת הפקדות',
+                    ),
+                  }));
                   numericTableOcrPages.push(await ocr.recognize(tableCanvas, pageNumber, {
-                    psm: 6, dpi: 300, whitelist: '0123456789.,/%-−₪',
+                    psm: 6,
+                    dpi: 300,
+                    whitelist: '0123456789.,/%-−₪',
+                    progressContext: progressContext(
+                      pageNumber, 0.72, 0.84, 'numeric-table', 'אימות מספרים בטבלה',
+                    ),
                   }));
                 } finally {
                   L.releaseCanvas(tableCanvas);
                   L.releaseCanvas(tableCrop);
                 }
               }
-              for (const rowBand of (tableRegion?.rowBands || []).slice(0, 12)) {
+              const rowBands = (tableRegion?.rowBands || []).slice(0, 12);
+              for (let rowIndex = 0; rowIndex < rowBands.length; rowIndex += 1) {
+                const rowBand = rowBands[rowIndex];
                 const rowCrop = L.cropCanvas(highResolution, rowBand, { padding: 2, scale: 2.1 });
                 if (!rowCrop) continue;
                 const rowCanvas = L.prepareOcrCanvas(rowCrop, { grayscale: true, contrast: 1.12 });
                 try {
+                  const rowStart = 0.84 + (rowIndex / Math.max(1, rowBands.length)) * 0.14;
+                  const rowEnd = 0.84 + ((rowIndex + 1) / Math.max(1, rowBands.length)) * 0.14;
                   const rowResult = await ocr.recognize(rowCanvas, pageNumber, {
-                    psm: 7, dpi: 300, whitelist: '0123456789.,/%-−₪ ',
+                    psm: 7,
+                    dpi: 300,
+                    whitelist: '0123456789.,/%-−₪ ',
+                    progressContext: progressContext(
+                      pageNumber,
+                      rowStart,
+                      rowEnd,
+                      'table-row',
+                      `קריאת שורה ${rowIndex + 1} מתוך ${rowBands.length}`,
+                    ),
                   });
                   if (String(rowResult.text || '').trim()) {
                     const rowText = String(rowResult.text).trim();
@@ -822,6 +881,10 @@
               L.releaseCanvas(highResolution);
             }
           }
+          if (typeof options.onProgress === 'function') options.onProgress({
+            phase: 'ocr-page-complete', pageNumber, pageCount: maxPages,
+            overallProgress: pageProgress(ocrProgressStart, ocrProgressEnd, pageNumber, 1),
+          });
           const current = { pages: ocrPages, text: ocrPages.map((page) => page.text).join('\n') };
           const parsed = kind === SOURCES.PAYSLIP ? parsePayslipInput(current, 'ocr', file.name) : null;
           if (kind === SOURCES.PAYSLIP && parsed && parsed.hasCriticalFields) {
@@ -833,6 +896,9 @@
       } finally {
         await ocr.terminate();
       }
+      if (typeof options.onProgress === 'function') options.onProgress({
+        phase: 'finalizing', pageNumber: maxPages, pageCount: maxPages, overallProgress: 0.99,
+      });
       if (kind === SOURCES.PENSION_REPORT && root.PensionReportParser) {
         const ocrInput = { pages: ocrPages, text: ocrPages.map((page) => page.text).join('\n') };
         const enhancedInput = { pages: enhancedOcrPages, text: enhancedOcrPages.map((page) => page.text).join('\n') };

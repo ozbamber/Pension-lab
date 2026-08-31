@@ -101,6 +101,37 @@ async function setFile(cdp, filePath) {
   await cdp.command('DOM.setFileInputFiles', { nodeId: selected.nodeId, files: [filePath] });
 }
 
+async function startProgressRecording(cdp) {
+  await evaluate(cdp, `(() => {
+    const track = document.getElementById('processingTrack');
+    const bar = document.getElementById('processingBar');
+    const panel = document.getElementById('reportProcessing');
+    if (!track || !bar || !panel) throw new Error('OCR progress controls were not found.');
+    window.__ocrProgressEvents = [];
+    if (track.__pensionLabOriginalSetAttribute) return;
+    track.__pensionLabOriginalSetAttribute = track.setAttribute.bind(track);
+    track.setAttribute = (name, value) => {
+      track.__pensionLabOriginalSetAttribute(name, value);
+      if (name !== 'aria-valuenow') return;
+      window.__ocrProgressEvents.push({
+        ariaValue: Number(value),
+        barWidth: Number.parseFloat(bar.style.width || '0'),
+        active: !panel.classList.contains('hidden'),
+      });
+    };
+  })()`);
+}
+
+async function progressEvents(cdp) {
+  return evaluate(cdp, 'window.__ocrProgressEvents || []');
+}
+
+function assertMonotonic(values, label) {
+  for (let index = 1; index < values.length; index += 1) {
+    assert(values[index] >= values[index - 1], `${label} moved backwards: ${values[index - 1]} -> ${values[index]}.`);
+  }
+}
+
 function assert(condition, message) { if (!condition) throw new Error(message); }
 
 (async () => {
@@ -135,7 +166,14 @@ function assert(condition, message) { if (!condition) throw new Error(message); 
 
     await evaluate(cdp, 'window.PensionLabTest.reset()');
     const scanRequestStart = requests.length;
+    await startProgressRecording(cdp);
     await setFile(cdp, scannedFixture);
+    await waitFor(() => evaluate(cdp, `(() => {
+      const panel = document.getElementById('reportProcessing');
+      const track = document.getElementById('processingTrack');
+      return !panel.classList.contains('hidden') && track.getAttribute('aria-valuenow') === '100';
+    })()`), 180000, 'visible OCR completion state');
+    assert((await evaluate(cdp, 'window.PensionLabTest.getSelectedDocument("pensionReport")')) === null, 'OCR review opened before the visible completion state was painted.');
     await waitFor(async () => (await evaluate(cdp, 'window.PensionLabTest.getSelectedDocument("pensionReport")?.method')) === 'ocr', 180000, 'scanned report OCR');
     const scannedDocument = await evaluate(cdp, 'window.PensionLabTest.getSelectedDocument("pensionReport")');
     assert(scannedDocument.pensionReportState.derived.monthsUsed >= 1, 'OCR report did not preserve a reliable contribution month.');
@@ -146,6 +184,17 @@ function assert(condition, message) { if (!condition) throw new Error(message); 
     }
     assert(scanRequests.every((request) => request.method === 'GET' && request.bodyBytes === 0), 'Document processing sent request bodies or non-GET requests.');
     console.log('✓ scanned pension report used same-origin local OCR and reached editable review');
+
+    const completedProgress = await progressEvents(cdp);
+    const activeProgress = completedProgress.filter((event) => event.active);
+    const ariaValues = activeProgress.map((event) => event.ariaValue);
+    const barWidths = activeProgress.map((event) => event.barWidth);
+    assert(activeProgress.length >= 5, `OCR progress exposed too few updates: ${JSON.stringify(activeProgress)}.`);
+    assertMonotonic(ariaValues, 'OCR aria-valuenow');
+    assertMonotonic(barWidths, 'OCR progress bar');
+    assert(activeProgress.some((event) => event.ariaValue === 100 && event.barWidth === 100), 'OCR progress did not reach 100% before completion.');
+    assert((await evaluate(cdp, 'document.getElementById("processingTrack").getAttribute("aria-valuenow")')) === '0', 'Completed OCR did not reset the inactive progressbar state.');
+    console.log('✓ OCR progress stayed monotonic, reached 100%, and reset its inactive ARIA state');
 
     const stored = await evaluate(cdp, 'JSON.stringify(sessionStorage)');
     assert(!stored.includes(path.basename(scannedFixture)), 'Document filename was persisted.');
@@ -163,12 +212,46 @@ function assert(condition, message) { if (!condition) throw new Error(message); 
     console.log('✓ OCR review has no horizontal overflow at 390px');
 
     await evaluate(cdp, 'window.PensionLabTest.reset()');
+    await startProgressRecording(cdp);
     await setFile(cdp, scannedFixture);
     await waitFor(() => evaluate(cdp, 'window.PensionLabTest.isReportProcessing()'), 5000, 'cancellable OCR processing');
+    const restartedProgress = (await progressEvents(cdp)).filter((event) => event.active);
+    assert(restartedProgress.length >= 1, 'A new OCR upload did not expose a progress update.');
+    assert(restartedProgress[0].ariaValue < 100 && restartedProgress[0].barWidth < 100, 'A new OCR upload reused the previous completed progress.');
     await evaluate(cdp, 'document.getElementById("cancelProcessing").click()');
     await waitFor(async () => !(await evaluate(cdp, 'window.PensionLabTest.isReportProcessing()')), 30000, 'OCR cancellation');
     assert((await evaluate(cdp, 'window.PensionLabTest.getSelectedDocument("pensionReport")')) === null, 'Cancellation imported a partial document.');
-    console.log('✓ cancellation stopped report processing without importing partial state');
+    assert((await evaluate(cdp, 'document.getElementById("processingTrack").getAttribute("aria-valuenow")')) === '0', 'Cancellation did not reset the inactive progressbar state.');
+    assert((await evaluate(cdp, 'document.getElementById("pensionReportStatus").textContent')) === 'העיבוד בוטל.', 'Cancellation left a stale processing status.');
+
+    await cdp.command('Page.reload', { ignoreCache: true });
+    await waitFor(() => evaluate(cdp, 'document.readyState === "complete" && Boolean(window.PensionLabTest)'), 20000, 'cold-cancellation test reload');
+    await evaluate(cdp, `(() => {
+      window.__coldOcrInitializationStarted = false;
+      window.__lateOcrWorkerTerminated = false;
+      window.Tesseract = {
+        createWorker() {
+          window.__coldOcrInitializationStarted = true;
+          return new Promise((resolve) => window.setTimeout(() => resolve({
+            terminate() {
+              window.__lateOcrWorkerTerminated = true;
+              return Promise.resolve();
+            },
+          }), 1200));
+        },
+      };
+    })()`);
+    await setFile(cdp, scannedFixture);
+    await waitFor(() => evaluate(cdp, 'window.__coldOcrInitializationStarted'), 10000, 'cold OCR initialization');
+    const coldCancelStartedAt = Date.now();
+    await evaluate(cdp, 'document.getElementById("cancelProcessing").click()');
+    await waitFor(async () => !(await evaluate(cdp, 'window.PensionLabTest.isReportProcessing()')), 3000, 'cold OCR cancellation');
+    const coldCancelElapsed = Date.now() - coldCancelStartedAt;
+    assert(coldCancelElapsed < 1000, `Cold OCR cancellation took ${coldCancelElapsed}ms instead of returning immediately.`);
+    assert((await evaluate(cdp, 'document.getElementById("pensionReportStatus").textContent')) === 'העיבוד בוטל.', 'Cold OCR cancellation left a stale processing status.');
+    await waitFor(() => evaluate(cdp, 'window.__lateOcrWorkerTerminated'), 5000, 'late OCR worker cleanup');
+    assert((await evaluate(cdp, 'window.PensionLabTest.getSelectedDocument("pensionReport")')) === null, 'Cold cancellation imported a partial document.');
+    console.log(`✓ warm and cold-start cancellation returned immediately, reset status/progress, and cleaned the late worker (${coldCancelElapsed}ms)`);
 
     const missing = requests.filter((request) => request.status === 404);
     const browserErrors = cdp.events.filter((event) => event.method === 'Runtime.exceptionThrown' ||
@@ -177,7 +260,7 @@ function assert(condition, message) { if (!condition) throw new Error(message); 
       (event.method === 'Network.loadingFailed' && !event.params.canceled));
     assert(missing.length === 0, `OCR browser test produced 404s: ${JSON.stringify(missing)}`);
     assert(browserErrors.length === 0, `OCR browser errors: ${JSON.stringify(browserErrors.slice(0, 3))}`);
-    console.log('All 5 pension-report OCR/privacy browser groups passed.');
+    console.log('All 6 pension-report OCR/privacy browser groups passed.');
   } finally {
     cdp?.close();
     chrome.kill();

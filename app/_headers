@@ -9,3 +9,6 @@
 
 /404.html
   Cache-Control: no-cache
+
+/vendor/tessdata/best-d18b4db5-ed350f37/*
+  Cache-Control: public, max-age=31536000, immutable

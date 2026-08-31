@@ -25,6 +25,7 @@
   let flowStep = 1;
   let moneyMode = 'real';
   let processingController = null;
+  let processingProgress = 0;
   let userCorrections = {};
   let simulatorBaseline = null;
   let simulatorControls = null;
@@ -824,22 +825,61 @@
   function setProcessing(active, update = {}) {
     $('reportProcessing').classList.toggle('hidden', !active);
     $('pensionReportFile').disabled = active;
-    if (update.title) $('processingTitle').textContent = update.title;
-    if (update.detail) $('processingDetail').textContent = update.detail;
-    if (update.progress != null) $('processingBar').style.width = `${Math.max(5, Math.min(100, Number(update.progress) * 100))}%`;
-    else if (active) $('processingBar').style.width = '18%';
+    if (!active) {
+      processingProgress = 0;
+      $('processingTrack').setAttribute('aria-valuenow', '0');
+      return;
+    }
+    if (update.resetProgress) processingProgress = 0;
+    if (update.title && $('processingTitle').textContent !== update.title) $('processingTitle').textContent = update.title;
+    if (update.detail && $('processingDetail').textContent !== update.detail) $('processingDetail').textContent = update.detail;
+    const requested = Number(update.progress);
+    if (Number.isFinite(requested)) processingProgress = Math.max(processingProgress, Math.max(0.05, Math.min(1, requested)));
+    else if (!processingProgress) processingProgress = 0.08;
+    const percent = Math.round(processingProgress * 1000) / 10;
+    $('processingBar').style.width = `${percent}%`;
+    $('processingTrack').setAttribute('aria-valuenow', String(Math.round(percent)));
   }
 
   function progressUpdate(progress) {
     const phase = String(progress?.phase || '');
+    const overallProgress = progress?.overallProgress == null ? Number.NaN : Number(progress.overallProgress);
+    const pageDetail = progress?.pageNumber && progress?.pageCount
+      ? `עמוד ${progress.pageNumber} מתוך ${progress.pageCount}`
+      : '';
     if (phase === 'pdf-text') {
-      setProcessing(true, { title: 'קוראים את הדוח…', detail: `עמוד ${progress.pageNumber || 1} מתוך ${progress.pageCount || 1}`, progress: (progress.pageNumber || 1) / Math.max(1, progress.pageCount || 1) * 0.55 });
-    } else if (phase === 'scanned-pdf' || phase === 'rendering') {
-      setProcessing(true, { title: 'הדוח נראה סרוק', detail: 'מפעילים זיהוי טקסט מקומי', progress: 0.62 });
+      setProcessing(true, {
+        title: 'קוראים את הדוח…',
+        detail: pageDetail || 'מחלצים שכבת טקסט מקומית',
+        progress: 0.08 + (progress.pageNumber || 1) / Math.max(1, progress.pageCount || 1) * 0.2,
+      });
+    } else if (phase === 'scanned-pdf') {
+      setProcessing(true, { title: 'הדוח נראה סרוק', detail: 'מפעילים זיהוי טקסט מקומי', progress: 0.3 });
+    } else if (phase === 'rendering') {
+      setProcessing(true, {
+        title: 'מכינים את עמודי הדוח…',
+        detail: pageDetail || 'מכינים תמונה לזיהוי מקומי',
+        progress: Number.isFinite(overallProgress) ? overallProgress : 0.42,
+      });
     } else if (phase === 'recognizing') {
-      setProcessing(true, { title: 'מזהים טקסט בדוח…', detail: 'העיבוד נשאר במכשיר שלך', progress: 0.65 + (Number(progress.progress) || 0) * 0.3 });
+      const stageDetail = [pageDetail, progress?.stageLabel].filter(Boolean).join(' · ');
+      setProcessing(true, {
+        title: 'מזהים טקסט בדוח…',
+        detail: stageDetail || 'העיבוד נשאר במכשיר שלך',
+        progress: Number.isFinite(overallProgress) ? overallProgress : 0.45 + (Number(progress.progress) || 0) * 0.5,
+      });
     } else if (phase === 'loading-language' || phase === 'loading-ocr') {
-      setProcessing(true, { title: 'מכינים זיהוי עברית…', detail: 'טעינה מקומית חד־פעמית', progress: 0.6 });
+      setProcessing(true, {
+        title: 'מכינים זיהוי עברית…',
+        detail: 'טעינה מקומית חד־פעמית',
+        progress: 0.3 + (Number(progress.progress) || 0) * 0.1,
+      });
+    } else if (phase === 'ocr-page-complete' || phase === 'finalizing') {
+      setProcessing(true, {
+        title: phase === 'finalizing' ? 'מסכמים את הנתונים…' : 'מזהים טקסט בדוח…',
+        detail: phase === 'finalizing' ? 'בודקים התאמות וסכומים' : pageDetail,
+        progress: Number.isFinite(overallProgress) ? overallProgress : 0.98,
+      });
     }
   }
 
@@ -868,24 +908,58 @@
     showStep(2, { focusTarget: 'reviewTitle' });
   }
 
+  function waitForCompletionPaint() {
+    return new Promise((resolve) => {
+      const holdVisible = () => window.setTimeout(resolve, 250);
+      if (typeof window.requestAnimationFrame !== 'function') {
+        holdVisible();
+        return;
+      }
+      window.requestAnimationFrame(() => window.requestAnimationFrame(holdVisible));
+    });
+  }
+
   async function handleReportSelection() {
     const file = $('pensionReportFile').files?.[0];
     if (!file) return;
     if (processingController) processingController.abort();
-    processingController = new AbortController();
+    const controller = new AbortController();
+    processingController = controller;
     $('pensionReportStatus').textContent = 'מתחילים לקרוא את הדוח…';
-    setProcessing(true, { title: 'פותחים את הדוח…', detail: 'המסמך אינו נשלח לשרת', progress: 0.08 });
+    setProcessing(true, { title: 'פותחים את הדוח…', detail: 'המסמך אינו נשלח לשרת', progress: 0.08, resetProgress: true });
     try {
-      const extraction = await D.extract(file, D.SOURCES.PENSION_REPORT, { signal: processingController.signal, onProgress: progressUpdate });
-      $('pensionReportStatus').textContent = extractionStatusText(extraction);
-      if (extraction.status !== 'cancelled' && !['unsupported-type', 'file-too-large', 'password-protected', 'corrupted-pdf', 'unreadable-pdf', 'wrong-document', 'too-many-pages'].includes(extraction.status)) {
-        applyExtraction(extraction);
+      const extraction = await D.extract(file, D.SOURCES.PENSION_REPORT, {
+        signal: controller.signal,
+        onProgress(progress) {
+          if (processingController === controller) progressUpdate(progress);
+        },
+      });
+      const reviewable = ![
+        'cancelled', 'unsupported-type', 'file-too-large', 'password-protected', 'corrupted-pdf',
+        'unreadable-pdf', 'wrong-document', 'too-many-pages',
+      ].includes(extraction.status);
+      if (reviewable) {
+        setProcessing(true, { title: 'הדוח נקרא', detail: 'פותחים את שלב הבדיקה', progress: 1 });
+        await waitForCompletionPaint();
       }
+      if (processingController !== controller) return;
+      if (controller.signal.aborted || extraction.status === 'cancelled') {
+        $('pensionReportStatus').textContent = 'העיבוד בוטל.';
+        return;
+      }
+      $('pensionReportStatus').textContent = extractionStatusText(extraction);
+      if (reviewable) applyExtraction(extraction);
     } catch (_) {
-      $('pensionReportStatus').textContent = 'לא הצלחנו לקרוא את הדוח. נסו שוב או השתמשו בעותק PDF אחר.';
+      if (processingController === controller) {
+        $('pensionReportStatus').textContent = controller.signal.aborted
+          ? 'העיבוד בוטל.'
+          : 'לא הצלחנו לקרוא את הדוח. נסו שוב או השתמשו בעותק PDF אחר.';
+      }
     } finally {
-      processingController = null;
-      setProcessing(false);
+      if (processingController === controller) {
+        processingController = null;
+        setProcessing(false);
+      }
     }
   }
 

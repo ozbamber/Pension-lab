@@ -3,6 +3,7 @@
 
   let pdfModulePromise = null;
   let tesseractPromise = null;
+  const TESSDATA_VERSION = 'best-d18b4db5-ed350f37';
 
   function assetRoot() {
     if (root.PENSION_LAB_ASSET_ROOT) return new URL(root.PENSION_LAB_ASSET_ROOT, root.location && root.location.href ? root.location.href : undefined);
@@ -23,6 +24,30 @@
 
   function throwIfAborted(signal) {
     if (signal && signal.aborted) throw abortError();
+  }
+
+  function awaitWithAbort(operation, signal, onLateResolve) {
+    const pending = Promise.resolve(operation);
+    if (!signal) return pending;
+    throwIfAborted(signal);
+    let aborted = false;
+    let onAbort = null;
+    const cancellation = new Promise((_, reject) => {
+      onAbort = () => {
+        aborted = true;
+        reject(abortError());
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+    });
+    if (typeof onLateResolve === 'function') {
+      pending.then((value) => {
+        if (!aborted) return;
+        try {
+          Promise.resolve(onLateResolve(value)).catch(() => {});
+        } catch (_) {}
+      }, () => {});
+    }
+    return Promise.race([pending, cancellation]).finally(() => signal.removeEventListener('abort', onAbort));
   }
 
   async function loadPdfJs() {
@@ -140,44 +165,65 @@
 
   async function createOcrEngine(options = {}) {
     throwIfAborted(options.signal);
-    const Tesseract = await loadTesseract();
+    const Tesseract = await awaitWithAbort(loadTesseract(), options.signal);
     throwIfAborted(options.signal);
     let worker = null;
+    let activeRecognition = null;
     const logger = (progress) => {
+      const rawProgress = Number.isFinite(Number(progress && progress.progress)) ? Number(progress.progress) : null;
+      const rangeStart = Number(activeRecognition?.start);
+      const rangeEnd = Number(activeRecognition?.end);
+      const overallProgress = rawProgress != null && Number.isFinite(rangeStart) && Number.isFinite(rangeEnd) && rangeEnd >= rangeStart
+        ? rangeStart + Math.max(0, Math.min(1, rawProgress)) * (rangeEnd - rangeStart)
+        : null;
       if (typeof options.onProgress === 'function') options.onProgress({
         phase: ocrStatus(progress),
-        progress: Number.isFinite(Number(progress && progress.progress)) ? Number(progress.progress) : null,
+        progress: rawProgress,
+        overallProgress,
+        pageNumber: activeRecognition?.pageNumber || null,
+        pageCount: activeRecognition?.pageCount || null,
+        stage: activeRecognition?.stage || null,
+        stageLabel: activeRecognition?.stageLabel || null,
       });
     };
-    worker = await Tesseract.createWorker('heb+eng', 1, {
+    const workerInitialization = Tesseract.createWorker('heb+eng', 1, {
       workerPath: assetUrl('vendor/tesseract/worker.min.js'),
       corePath: assetUrl('vendor/tesseract/tesseract-core-lstm.wasm.js'),
-      langPath: assetUrl('vendor/tessdata/'),
+      langPath: assetUrl(`vendor/tessdata/${TESSDATA_VERSION}/`),
+      cachePath: `pension-lab-tessdata-${TESSDATA_VERSION}`,
       gzip: true,
       workerBlobURL: false,
       logger,
     });
+    worker = await awaitWithAbort(workerInitialization, options.signal, (lateWorker) => lateWorker?.terminate?.());
     const cancel = () => { if (worker) worker.terminate().catch(() => {}); };
     if (options.signal) options.signal.addEventListener('abort', cancel, { once: true });
     return {
       async recognize(canvas, pageNumber, recognizeOptions = {}) {
         throwIfAborted(options.signal);
+        activeRecognition = recognizeOptions.progressContext && typeof recognizeOptions.progressContext === 'object'
+          ? { ...recognizeOptions.progressContext, pageNumber }
+          : { pageNumber };
         const parameters = {
           tessedit_pageseg_mode: String(Number(recognizeOptions.psm) || 3),
           preserve_interword_spaces: '1',
           user_defined_dpi: String(Number(recognizeOptions.dpi) || 300),
           tessedit_char_whitelist: String(recognizeOptions.whitelist || ''),
         };
-        await worker.setParameters(parameters);
-        const result = await worker.recognize(canvas, { rotateAuto: false }, { text: true, blocks: true });
-        throwIfAborted(options.signal);
-        const data = result && result.data ? result.data : {};
-        return {
-          pageNumber,
-          text: String(data.text || ''),
-          blocks: data.blocks || [],
-          confidence: Number.isFinite(Number(data.confidence)) ? Number(data.confidence) / 100 : null,
-        };
+        try {
+          await worker.setParameters(parameters);
+          const result = await worker.recognize(canvas, { rotateAuto: false }, { text: true, blocks: true });
+          throwIfAborted(options.signal);
+          const data = result && result.data ? result.data : {};
+          return {
+            pageNumber,
+            text: String(data.text || ''),
+            blocks: data.blocks || [],
+            confidence: Number.isFinite(Number(data.confidence)) ? Number(data.confidence) / 100 : null,
+          };
+        } finally {
+          activeRecognition = null;
+        }
       },
       async terminate() {
         if (options.signal) options.signal.removeEventListener('abort', cancel);

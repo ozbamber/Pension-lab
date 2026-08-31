@@ -54,7 +54,7 @@
         <p id="pensionReportStatus" class="upload-status" aria-live="polite">לא נבחר קובץ</p>
         <div id="reportProcessing" class="processing hidden" role="status" aria-live="polite">
           <div><strong id="processingTitle">קוראים את הדוח…</strong><span id="processingDetail">מזהים יתרה, דמי ניהול והפקדות</span></div>
-          <div class="processing-track" aria-hidden="true"><i id="processingBar"></i></div>
+          <div id="processingTrack" class="processing-track" role="progressbar" aria-labelledby="processingTitle" aria-describedby="processingDetail" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="processingBar"></i></div>
           <button type="button" id="cancelProcessing" class="text-button">ביטול</button>
         </div>
       </article>
@@ -207,10 +207,10 @@
   <script src="financial-normalizer.js?v=20260823-report-first"></script>
   <script src="pension-report-parser.js?v=20260823-report-first"></script>
   <script src="demo-fixture.js?v=20260828-demo"></script>
-  <script src="local-document-pipeline.js?v=20260823-report-first"></script>
-  <script src="document-extraction.js?v=20260823-report-first"></script>
+  <script src="local-document-pipeline.js?v=20260831-ocr"></script>
+  <script src="document-extraction.js?v=20260831-ocr"></script>
   <script src="simulator-config.js?v=20260831-audit"></script>
   <script src="simulator.js?v=20260831-audit"></script>
-  <script src="app.js?v=20260831-audit"></script>
+  <script src="app.js?v=20260831-ocr"></script>
 </body>
 </html>

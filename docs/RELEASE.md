@@ -6,7 +6,7 @@ Pension Lab is released as a static Cloudflare Pages site. `app/` is the only so
 
 - Use Node.js 22 or newer (`.nvmrc` and `package.json` record this requirement).
 - Start from the exact reviewed commit with a clean tracked worktree. Unrelated untracked private or dataset material must remain outside the release artifact.
-- Confirm that `app/document-extraction.js` and `app/pension-report-parser.js` still match the reviewed extraction baseline when a simulator-only release is intended.
+- Confirm that `app/document-extraction.js` and `app/pension-report-parser.js` still match the reviewed extraction baseline when a simulator-only release is intended. If OCR orchestration changes intentionally, keep parser/financial rules unchanged and require the full local-browser benchmark plus exact prediction comparison to the last accepted artifact.
 - Confirm the active Cloudflare account and the `pension-lab` Pages project before writing any deployment.
 
 ## Release gate
@@ -25,14 +25,15 @@ npm run test:browser:smoke
 npm run test:browser:simulator
 npm run test:browser:demo
 
-git diff --exit-code f7978fe1a15c8e2f738ec0de629e77ff736ceabb -- app/document-extraction.js app/pension-report-parser.js
+git diff --exit-code f7978fe1a15c8e2f738ec0de629e77ff736ceabb -- app/pension-report-parser.js
+git diff --check
 npm run build
 $hash1 = (Get-FileHash dist/pension-lab-he-standalone.html -Algorithm SHA256).Hash
 npm run build
 $hash2 = (Get-FileHash dist/pension-lab-he-standalone.html -Algorithm SHA256).Hash
 if ($hash1 -ne $hash2) { throw 'Non-deterministic standalone build' }
 npm run check:standalone
-if (-not (Test-Path dist/_headers) -or -not (Test-Path dist/404.html)) { throw 'Cloudflare release files are missing from dist' }
+if (-not (Test-Path dist/_headers) -or -not (Test-Path dist/_redirects) -or -not (Test-Path dist/404.html)) { throw 'Cloudflare release files are missing from dist' }
 ```
 
 ## Preview deployment

@@ -22,8 +22,8 @@ const requiredVendorPaths = [
   '/vendor/tesseract/tesseract.min.js',
   '/vendor/tesseract/worker.min.js',
   '/vendor/tesseract/tesseract-core-lstm.wasm.js',
-  '/vendor/tessdata/heb.traineddata.gz',
-  '/vendor/tessdata/eng.traineddata.gz',
+  '/vendor/tessdata/best-d18b4db5-ed350f37/heb.traineddata.gz',
+  '/vendor/tessdata/best-d18b4db5-ed350f37/eng.traineddata.gz',
 ];
 
 function chromiumPath() {
