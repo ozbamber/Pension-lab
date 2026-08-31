@@ -6,7 +6,7 @@
 - Hardened baseline and simulator inputs against blank, `null`, non-finite, excessive-horizon, overlapping-break, negative-contribution, and implausible contribution-rate states. Corrected retirement Explorer horizon propagation while preserving the reviewed PR1 baseline math.
 - Reworked range controls to expose their real percentage values to assistive technology, added visible non-color range status, field-scoped validation and focus, reliable information-panel focus return, Enter-to-calculate, bidi-safe signed currency, missing-confidence display, and clearer amount-fallback provenance.
 - Improved focus/tick/progress contrast, cleared the upload input for same-file retries, and kept the central forecast announcement concise through a dedicated live region.
-- Added a Hebrew 404 page, static security headers, Node 22 runtime metadata, an exact-SHA Cloudflare preview/production/rollback runbook, and a complete audit register in `docs/PR2-AUDIT-2026-08-31.md`.
+- Added a Hebrew 404 page, static security headers, Node 22 runtime metadata, a redirect-intolerant deployed-byte verifier, an exact-SHA Cloudflare preview/production/rollback runbook that rejects untracked application files, and a complete audit register in `docs/PR2-AUDIT-2026-08-31.md`.
 - Corrected the third-party notice to describe the pension-report OCR path. The PR1 extraction and pension-report parser remain unchanged from the reviewed safety baseline.
 
 ## Synthetic PR2 review mode and UI audit — 2026-08-28

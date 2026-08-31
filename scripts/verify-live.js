@@ -26,7 +26,7 @@ function assert(condition, message) {
 
 async function request(relativePath) {
   const url = new URL(relativePath, baseUrl);
-  const response = await fetch(url, { redirect: 'follow', cache: 'no-store' });
+  const response = await fetch(url, { redirect: 'manual', cache: 'no-store' });
   const bytes = Buffer.from(await response.arrayBuffer());
   return { url: response.url, response, bytes, text: bytes.toString('utf8') };
 }
@@ -61,7 +61,10 @@ async function verifyAsset(relativePath, contentTypePattern, requiredText) {
   for (const [name, expected] of Object.entries(expectedHeaders)) {
     assert(index.response.headers.get(name) === expected, `Missing or incorrect ${name} header`);
   }
-  assert((index.response.headers.get('permissions-policy') || '').includes('camera=()'), 'Missing restrictive Permissions-Policy header');
+  const permissionsPolicy = index.response.headers.get('permissions-policy') || '';
+  for (const directive of ['camera=()', 'geolocation=()', 'microphone=()', 'payment=()', 'usb=()']) {
+    assert(permissionsPolicy.split(',').map((item) => item.trim()).includes(directive), `Missing restrictive Permissions-Policy directive: ${directive}`);
+  }
 
   const assets = [];
   assets.push(await verifyAsset('/app.js', /(?:application|text)\/javascript/i, 'SESSION_SENSITIVE_KEYS'));

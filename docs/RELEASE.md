@@ -45,7 +45,9 @@ git diff --quiet
 if ($LASTEXITCODE -ne 0) { throw 'Tracked worktree changes remain' }
 git diff --cached --quiet
 if ($LASTEXITCODE -ne 0) { throw 'Staged changes remain' }
-git fetch origin $releaseBranch
+$untrackedAppFiles = @(git ls-files --others --exclude-standard -- app)
+if ($untrackedAppFiles.Count -gt 0) { throw "Untracked app files could enter dist: $($untrackedAppFiles -join ', ')" }
+git fetch --prune origin
 $releaseSha = git rev-parse HEAD
 if ((git rev-parse "origin/$releaseBranch") -ne $releaseSha) { throw 'HEAD does not match the pushed remote branch' }
 npx --yes wrangler pages deploy dist --project-name pension-lab --branch codex/pr2-interactive-simulator --commit-hash $releaseSha --commit-dirty=false
