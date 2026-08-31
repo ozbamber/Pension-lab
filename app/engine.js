@@ -7,6 +7,10 @@
 
   const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
 
+  function finiteNumber(value) {
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  }
+
   function annualToMonthly(rate) {
     const r = Number(rate) || 0;
     if (r <= -1) throw new Error('Annual rate must be greater than -100%');
@@ -51,11 +55,28 @@
     return active.sort((a, b) => Number(a.startAge) - Number(b.startAge))[active.length - 1];
   }
 
+  function assertNonOverlappingBreaks(careerBreaks) {
+    const ranges = (Array.isArray(careerBreaks) ? careerBreaks : []).map((item) => {
+      const start = finiteNumber(item?.startAge);
+      const durationMonths = finiteNumber(item?.durationMonths);
+      if (start == null || durationMonths == null || durationMonths <= 0) {
+        throw new Error('Career breaks require numeric start ages and positive durations');
+      }
+      return { start, end: start + durationMonths / 12 };
+    }).filter(Boolean).sort((left, right) => left.start - right.start || left.end - right.end);
+    for (let index = 1; index < ranges.length; index += 1) {
+      if (ranges[index].start < ranges[index - 1].end - 1e-12) {
+        throw new Error('Career breaks must not overlap');
+      }
+    }
+  }
+
   function project(input) {
     const s = JSON.parse(JSON.stringify(input || {}));
     if (!s.profile || !s.retirement || !s.inflation || !s.contribution || !s.fees) {
       throw new Error('Scenario is missing required fields');
     }
+    assertNonOverlappingBreaks(s.careerBreaks);
 
     const explicitMonths = Number(s.horizonMonths ?? s.retirement.monthsUntilRetirement);
     const hasExplicitHorizon = Number.isFinite(explicitMonths) && explicitMonths >= 1;
@@ -230,7 +251,7 @@
     const investmentGrowthNominal = retirementBalanceNominal - startBalance - totalContributionsNominal + totalFeesNominal;
     const investmentGrowthReal = retirementBalanceReal - startBalance - totalContributionsReal + totalFeesReal;
 
-    return {
+    const result = {
       months,
       snapshots,
       inflationIndex,
@@ -254,6 +275,13 @@
       finalSalaryNominal: salary,
       finalSalaryReal: salary / inflationIndex,
     };
+    const finiteResult = Object.entries(result)
+      .filter(([key]) => key !== 'snapshots')
+      .every(([, value]) => typeof value !== 'number' || Number.isFinite(value));
+    const finiteSnapshots = snapshots.every((item) => Object.values(item)
+      .every((value) => typeof value !== 'number' || Number.isFinite(value)));
+    if (!finiteResult || !finiteSnapshots) throw new Error('Scenario values exceed the supported numeric range');
+    return result;
   }
 
   function pensionAtCoefficient(result, coefficient, real = true) {
@@ -279,7 +307,10 @@
     for (let age = Math.ceil(minAge); age <= Math.floor(maxAge); age++) {
       if (age <= Number(scenario.profile.currentAge)) continue;
       const copy = cloneScenario(scenario);
+      const horizonMonths = Math.round((age - Number(copy.profile.currentAge)) * 12);
       copy.retirement.retirementAge = age;
+      copy.retirement.monthsUntilRetirement = horizonMonths;
+      copy.horizonMonths = horizonMonths;
       extendLastPhase(copy.salaryPhases, age);
       extendLastPhase(copy.returnPhases, age);
       try {
@@ -311,21 +342,24 @@
     const report = pensionReportState || {};
     if (report.fundType === 'old_pension') throw new Error('Old pension funds require a rights-based model and cannot use the accumulation forecast');
     if (report.fundType !== 'new_pension' || report.supportedForCurrentForecast !== true) throw new Error('A confirmed new-pension fund type is required for the accumulation forecast');
-    const years = Number(yearsUntilRetirement);
+    const years = finiteNumber(yearsUntilRetirement);
     const monthsUntilRetirement = Math.round(years * 12);
-    const currentBalance = report.currentBalance == null ? NaN : Number(report.currentBalance);
-    const monthlyContribution = report.derived?.baselineMonthlyContribution == null ? NaN : Number(report.derived.baselineMonthlyContribution);
-    const depositFee = report.fees?.depositRate == null ? NaN : Number(report.fees.depositRate);
-    const balanceFee = report.fees?.balanceRate == null ? NaN : Number(report.fees.balanceRate);
-    if (!Number.isFinite(years) || years <= 0 || monthsUntilRetirement < 1) throw new Error('Years until retirement must be greater than zero');
-    if (!Number.isFinite(currentBalance) || currentBalance < 0) throw new Error('A confirmed current balance is required');
-    if (!Number.isFinite(monthlyContribution) || monthlyContribution < 0) throw new Error('A confirmed monthly pension contribution is required');
-    if (!Number.isFinite(depositFee) || depositFee < 0) throw new Error('A confirmed deposit management fee is required');
-    if (!Number.isFinite(balanceFee) || balanceFee < 0) throw new Error('A confirmed balance management fee is required');
+    const currentBalance = finiteNumber(report.currentBalance);
+    const monthlyContribution = finiteNumber(report.derived?.baselineMonthlyContribution);
+    const depositFee = finiteNumber(report.fees?.depositRate);
+    const balanceFee = finiteNumber(report.fees?.balanceRate);
+    if (!Number.isInteger(years) || years < 1 || years > 80 || monthsUntilRetirement < 1) throw new Error('Years until retirement must be an integer from 1 to 80');
+    if (currentBalance == null || currentBalance < 0) throw new Error('A confirmed current balance is required');
+    if (monthlyContribution == null || monthlyContribution < 0) throw new Error('A confirmed monthly pension contribution is required');
+    if (depositFee == null || depositFee < 0 || depositFee > 0.2) throw new Error('A confirmed deposit management fee from 0% to 20% is required');
+    if (balanceFee == null || balanceFee < 0 || balanceFee > 0.2) throw new Error('A confirmed balance management fee from 0% to 20% is required');
 
-    const inflationRate = Number.isFinite(Number(assumptions.inflationRate)) ? Number(assumptions.inflationRate) : 0.02;
-    const realReturnRate = Number.isFinite(Number(assumptions.realReturnRate)) ? Number(assumptions.realReturnRate) : 0.04;
-    const coefficient = Number.isFinite(Number(assumptions.coefficient)) ? Number(assumptions.coefficient) : 200;
+    const requestedInflation = finiteNumber(assumptions.inflationRate);
+    const requestedReturn = finiteNumber(assumptions.realReturnRate);
+    const requestedCoefficient = finiteNumber(assumptions.coefficient);
+    const inflationRate = requestedInflation == null ? 0.02 : requestedInflation;
+    const realReturnRate = requestedReturn == null ? 0.04 : requestedReturn;
+    const coefficient = Math.max(1, requestedCoefficient || 200);
     const scenario = {
       horizonMonths: monthsUntilRetirement,
       profile: { currentAge: 0, currentBalance, monthlySalary: 0, pensionableSalary: 0 },

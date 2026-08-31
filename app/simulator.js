@@ -12,6 +12,7 @@
   const EPSILON = 1e-12;
 
   function finite(value) {
+    if (value == null || (typeof value === 'string' && !value.trim())) return null;
     const numeric = Number(value);
     return Number.isFinite(numeric) ? numeric : null;
   }
@@ -32,7 +33,9 @@
   }
 
   function sameNumber(a, b) {
-    return Math.abs(Number(a) - Number(b)) <= EPSILON;
+    const left = finite(a);
+    const right = finite(b);
+    return left != null && right != null && Math.abs(left - right) <= EPSILON;
   }
 
   function supportedNewPension(report) {
@@ -44,9 +47,10 @@
     if (baseline == null) throw new Error(`Missing baseline for ${template.id}.`);
     const span = template.max - template.min;
     const extension = Math.max(template.step * 2, Math.abs(baseline) * 0.08, span * 0.08);
+    const expandedMin = baseline < template.min ? Math.min(template.min, baseline - extension) : template.min;
     return {
       ...template,
-      min: baseline < template.min ? Math.min(template.min, baseline - extension) : template.min,
+      min: template.min >= 0 ? Math.max(0, expandedMin) : expandedMin,
       max: baseline > template.max ? Math.max(template.max, baseline + extension) : template.max,
       baselineValue: baseline,
     };
@@ -71,6 +75,15 @@
       });
     }
     const baselineRate = baselineMonthlyContribution / averageReportedPensionSalary;
+    if (!Number.isFinite(baselineRate) || baselineRate < 0 || baselineRate > 1) {
+      return deepFreeze({
+        type: 'amount',
+        baselineMonthlyContribution,
+        averageReportedPensionSalary: null,
+        baselineValue: C.SLIDERS.monthlyContribution.baselineValue,
+        config: expandConfigToIncludeBaseline(C.SLIDERS.monthlyContribution, C.SLIDERS.monthlyContribution.baselineValue),
+      });
+    }
     return deepFreeze({
       type: 'rate',
       baselineMonthlyContribution,
@@ -131,10 +144,10 @@
   }
 
   function selectedMonthlyContribution(baseline, contributionValue) {
-    if (baseline.contribution.type === 'rate') {
-      return baseline.contribution.averageReportedPensionSalary * contributionValue;
-    }
-    return baseline.contribution.baselineMonthlyContribution * contributionValue;
+    const selected = baseline.contribution.type === 'rate'
+      ? baseline.contribution.averageReportedPensionSalary * contributionValue
+      : baseline.contribution.baselineMonthlyContribution * contributionValue;
+    return Math.max(0, selected);
   }
 
   function applySimulatorOverrides(baselineScenario, controls = {}) {
@@ -250,7 +263,8 @@
     const clamped = clamp(value, config.min, config.max);
     const steps = Math.round((clamped - config.min) / config.step);
     const decimalPlaces = Math.max(0, String(config.step).split('.')[1]?.length || 0) + 4;
-    return Number((config.min + steps * config.step).toFixed(decimalPlaces));
+    const snapped = Number((config.min + steps * config.step).toFixed(decimalPlaces));
+    return clamp(snapped, config.min, config.max);
   }
 
   return Object.freeze({

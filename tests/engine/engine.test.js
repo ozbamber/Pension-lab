@@ -264,6 +264,77 @@ test('annual rates at or below -100% are rejected', () => {
   assert.throws(() => E.annualToMonthly(-1), /greater than -100%/);
 });
 
+test('baseline projection rejects blank financial fields and out-of-range horizons', () => {
+  const valid = {
+    fundType: 'new_pension', supportedForCurrentForecast: true, currentBalance: 100000,
+    fees: { depositRate: 0, balanceRate: 0 },
+    derived: { baselineMonthlyContribution: 1000 },
+  };
+  assert.throws(() => E.projectBaseline({ ...valid, currentBalance: '' }, 20), /current balance/i);
+  assert.throws(() => E.projectBaseline({ ...valid, currentBalance: false }, 20), /current balance/i);
+  assert.throws(() => E.projectBaseline({ ...valid, derived: { baselineMonthlyContribution: ' ' } }, 20), /monthly pension contribution/i);
+  assert.throws(() => E.projectBaseline({ ...valid, derived: { baselineMonthlyContribution: [] } }, 20), /monthly pension contribution/i);
+  assert.throws(() => E.projectBaseline({ ...valid, fees: { depositRate: '', balanceRate: 0 } }, 20), /deposit management fee/i);
+  assert.throws(() => E.projectBaseline({ ...valid, fees: { depositRate: false, balanceRate: 0 } }, 20), /deposit management fee/i);
+  assert.throws(() => E.projectBaseline({ ...valid, fees: { depositRate: 0.2001, balanceRate: 0 } }, 20), /deposit management fee/i);
+  assert.throws(() => E.projectBaseline({ ...valid, fees: { depositRate: 0, balanceRate: 1e9 } }, 20), /balance management fee/i);
+  assert.throws(() => E.projectBaseline({ ...valid, currentBalance: 1e308 }, 80), /supported numeric range/i);
+  assert.throws(() => E.projectBaseline({ ...valid, derived: { baselineMonthlyContribution: 1e308 } }, 80), /supported numeric range/i);
+  assert.throws(() => E.projectBaseline(valid, true), /integer from 1 to 80/i);
+  assert.throws(() => E.projectBaseline(valid, [20]), /integer from 1 to 80/i);
+  assert.throws(() => E.projectBaseline(valid, 20.5), /integer from 1 to 80/i);
+  assert.throws(() => E.projectBaseline(valid, 81), /integer from 1 to 80/i);
+  assert.strictEqual(E.projectBaseline({ ...valid, currentBalance: 0, derived: { baselineMonthlyContribution: 0 } }, 1).monthsUntilRetirement, 12);
+});
+
+test('null optional baseline assumptions use consistent defaults while explicit zero remains valid', () => {
+  const report = {
+    fundType: 'new_pension', supportedForCurrentForecast: true, currentBalance: 100000,
+    fees: { depositRate: 0, balanceRate: 0 }, derived: { baselineMonthlyContribution: 1000 },
+  };
+  const defaults = E.projectBaseline(report, 10, { realReturnRate: null, inflationRate: null, coefficient: null });
+  assert.strictEqual(defaults.assumptions.realReturnRate, 0.04);
+  assert.strictEqual(defaults.assumptions.inflationRate, 0.02);
+  assert.strictEqual(defaults.assumptions.coefficient, 200);
+  approximately(defaults.monthlyPensionReal, defaults.retirementBalanceReal / defaults.assumptions.coefficient, 1e-12);
+  const zeroRates = E.projectBaseline(report, 10, { realReturnRate: 0, inflationRate: 0, coefficient: 0 });
+  assert.strictEqual(zeroRates.assumptions.realReturnRate, 0);
+  assert.strictEqual(zeroRates.assumptions.inflationRate, 0);
+  assert.strictEqual(zeroRates.assumptions.coefficient, 200);
+});
+
+test('retirement explorer updates explicit horizons inherited from a baseline scenario', () => {
+  const report = {
+    fundType: 'new_pension', supportedForCurrentForecast: true, currentBalance: 100000,
+    fees: { depositRate: 0, balanceRate: 0 }, derived: { baselineMonthlyContribution: 1000 },
+  };
+  const scenario = E.projectBaseline(report, 20).scenario;
+  const rows = E.retirementAgeSeries(scenario, 21, 22);
+  assert.deepStrictEqual(rows.map((row) => row.age), [21, 22]);
+  assert(rows[1].realBalance > rows[0].realBalance);
+});
+
+test('overlapping career breaks fail closed independent of array order', () => {
+  const first = { id: 'first', startAge: 31, durationMonths: 12, contributionDuringBreak: 0, salaryResumeMode: 'projected' };
+  const second = { id: 'second', startAge: 31.5, durationMonths: 12, contributionDuringBreak: 500, salaryResumeMode: 'projected' };
+  for (const careerBreaks of [[first, second], [second, first]]) {
+    const scenario = base();
+    scenario.careerBreaks = careerBreaks;
+    assert.throws(() => E.project(scenario), /must not overlap/i);
+  }
+});
+
+test('malformed career-break numbers fail closed instead of being coerced', () => {
+  for (const careerBreaks of [
+    [{ id: 'boolean', startAge: false, durationMonths: 12 }],
+    [{ id: 'array', startAge: 31, durationMonths: [12] }],
+  ]) {
+    const scenario = base();
+    scenario.careerBreaks = careerBreaks;
+    assert.throws(() => E.project(scenario), /require numeric start ages/i);
+  }
+});
+
 let passed = 0;
 for (const { name, fn } of tests) {
   try {

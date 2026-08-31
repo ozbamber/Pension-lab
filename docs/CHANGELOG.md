@@ -1,5 +1,14 @@
 # יומן שינויים
 
+## Whole-product audit and production hardening — 2026-08-31
+
+- Removed nested raw PDF/OCR evidence from browser-session persistence, corrected missing financial values that appeared as zero, and added browser regressions proving that raw sentinels and sensitive keys do not reach `sessionStorage`.
+- Hardened baseline and simulator inputs against blank, `null`, non-finite, excessive-horizon, overlapping-break, negative-contribution, and implausible contribution-rate states. Corrected retirement Explorer horizon propagation while preserving the reviewed PR1 baseline math.
+- Reworked range controls to expose their real percentage values to assistive technology, added visible non-color range status, field-scoped validation and focus, reliable information-panel focus return, Enter-to-calculate, bidi-safe signed currency, missing-confidence display, and clearer amount-fallback provenance.
+- Improved focus/tick/progress contrast, cleared the upload input for same-file retries, and kept the central forecast announcement concise through a dedicated live region.
+- Added a Hebrew 404 page, static security headers, Node 22 runtime metadata, an exact-SHA Cloudflare preview/production/rollback runbook, and a complete audit register in `docs/PR2-AUDIT-2026-08-31.md`.
+- Corrected the third-party notice to describe the pension-report OCR path. The PR1 extraction and pension-report parser remain unchanged from the reviewed safety baseline.
+
 ## Synthetic PR2 review mode and UI audit — 2026-08-28
 
 - Added an explicit query-only `?demo=1` review route. It creates a fresh canonical synthetic `new_pension` state with 12 reliable monthly rows, derives its contribution baseline through the production normalizer, fixes the horizon at 25 years by default, and enters the unchanged PR2 simulator APIs without PDF/OCR work.

@@ -122,10 +122,8 @@ async function click(cdp, selector) {
 
 async function setSlider(cdp, key, value) {
   await evaluate(cdp, `(() => {
-    const baseline = window.PensionLabTest.getSimulatorBaseline();
-    const config = baseline.controlsConfig[${JSON.stringify(key)}];
     const input = document.querySelector('[data-simulator-input="${key}"]');
-    input.value = String(window.PensionSimulator.valueToPosition(config, ${Number(value)}));
+    input.value = String(${Number(value)} * 100);
     input.dispatchEvent(new Event('input', { bubbles: true }));
   })()`);
   await waitFor(async () => Math.abs(Number((await evaluate(cdp, `window.PensionLabTest.getSimulatorControls()[${JSON.stringify(key)}]`)) - value)) <= 0.00051, 2000, `${key} slider`);

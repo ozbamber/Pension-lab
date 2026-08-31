@@ -7,7 +7,7 @@
   <meta name="color-scheme" content="light" />
   <link rel="icon" href="data:," />
   <title>Pension Lab | תחזית מתוך דוח הפנסיה</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=20260831-audit" />
 </head>
 <body>
   <header class="topbar">
@@ -36,7 +36,7 @@
     <section id="uploadStep" class="flow-step upload-step" aria-labelledby="uploadTitle">
       <div class="hero-copy">
         <span class="eyebrow">תחזית פנסיה, בלי שאלון ארוך</span>
-        <h1 id="uploadTitle">הפנסיה שלך כבר כתובה בדוח.</h1>
+        <h1 id="uploadTitle" tabindex="-1">הפנסיה שלך כבר כתובה בדוח.</h1>
         <p>מעלים דוח שנתי או רבעוני מקרן הפנסיה, בודקים את מה שמצאנו ומוסיפים רק כמה שנים נשארו עד הפרישה.</p>
       </div>
 
@@ -68,13 +68,13 @@
     <section id="reviewStep" class="flow-step hidden" aria-labelledby="reviewTitle">
       <div class="section-heading">
         <span class="eyebrow">שלב 2 · בדיקה קצרה</span>
-        <h1 id="reviewTitle">קראנו את הדוח</h1>
+        <h1 id="reviewTitle" tabindex="-1">קראנו את הדוח</h1>
         <p id="reportMeta">בדקו שהמספרים המרכזיים תואמים לדוח. אפשר לתקן כל ערך לפני החישוב.</p>
       </div>
 
       <div id="reviewWarning" class="review-warning hidden" role="alert"></div>
 
-      <div id="routingNotice" class="routing-notice hidden" role="status">
+      <div id="routingNotice" class="routing-notice hidden" role="status" tabindex="-1">
         <p id="routingMessage"></p>
         <label id="fundTypeConfirmationWrap" class="fund-type-confirmation hidden" for="fundTypeConfirmation">
           <span>כדי להמשיך, אשרו מה כתוב בדוח:</span>
@@ -89,13 +89,13 @@
       <div id="reviewMetrics" class="review-grid">
         <label class="metric-card balance-card" for="currentBalance">
           <span class="metric-label">יתרה נוכחית <b id="currentBalanceSource" class="source-chip">מהדוח</b></span>
-          <span class="money-field"><span>₪</span><input id="currentBalance" type="number" min="0" step="1000" inputmode="numeric" aria-describedby="currentBalanceError" /></span>
+          <span class="money-field"><span>₪</span><input id="currentBalance" type="number" min="0" step="1000" inputmode="numeric" required aria-required="true" aria-describedby="currentBalanceError" /></span>
           <small id="currentBalanceError" class="field-error"></small>
         </label>
 
         <label class="metric-card contribution-card" for="baselineMonthlyContribution">
           <span class="metric-label">הפקדה חודשית ממוצעת <b id="contributionSource" class="source-chip">מהדוח</b></span>
-          <span class="money-field"><span>₪</span><input id="baselineMonthlyContribution" type="number" min="0" step="50" inputmode="decimal" aria-describedby="contributionMonthsNote baselineContributionError" /></span>
+          <span class="money-field"><span>₪</span><input id="baselineMonthlyContribution" type="number" min="0" step="50" inputmode="decimal" required aria-required="true" aria-describedby="contributionMonthsNote baselineContributionError" /></span>
           <small id="contributionMonthsNote">—</small>
           <small id="baselineContributionError" class="field-error"></small>
         </label>
@@ -109,8 +109,8 @@
         <article class="metric-card fees-card">
           <span class="metric-label">דמי ניהול <b id="feesSource" class="source-chip">מהדוח</b></span>
           <div class="fee-fields">
-            <label><span>מהפקדה</span><span class="percent-field"><input id="depositFee" type="number" min="0" max="20" step="0.01" inputmode="decimal" aria-describedby="depositFeeError" /><b>%</b></span><small id="depositFeeError" class="field-error"></small></label>
-            <label><span>מצבירה בשנה</span><span class="percent-field"><input id="balanceFee" type="number" min="0" max="20" step="0.01" inputmode="decimal" aria-describedby="balanceFeeError" /><b>%</b></span><small id="balanceFeeError" class="field-error"></small></label>
+            <label><span>מהפקדה</span><span class="percent-field"><input id="depositFee" type="number" min="0" max="20" step="0.01" inputmode="decimal" required aria-required="true" aria-describedby="depositFeeError" /><b>%</b></span><small id="depositFeeError" class="field-error"></small></label>
+            <label><span>מצבירה בשנה</span><span class="percent-field"><input id="balanceFee" type="number" min="0" max="20" step="0.01" inputmode="decimal" required aria-required="true" aria-describedby="balanceFeeError" /><b>%</b></span><small id="balanceFeeError" class="field-error"></small></label>
           </div>
         </article>
       </div>
@@ -132,10 +132,10 @@
     <section id="yearsStep" class="flow-step years-step hidden" aria-labelledby="yearsTitle">
       <div class="years-card">
         <span class="eyebrow">שלב 3 · אופק התכנון</span>
-        <h1 id="yearsTitle">כמה שנים נשארו לך עד הפרישה?</h1>
+        <h1 id="yearsTitle" tabindex="-1">כמה שנים נשארו לך עד הפרישה?</h1>
         <p>זה הנתון הידני היחיד שנדרש לתחזית הבסיסית.</p>
         <label class="years-input" for="yearsUntilRetirement">
-          <input id="yearsUntilRetirement" type="number" min="1" max="80" step="1" inputmode="numeric" placeholder="25" aria-describedby="yearsError" />
+          <input id="yearsUntilRetirement" type="number" min="1" max="80" step="1" inputmode="numeric" placeholder="25" required aria-required="true" aria-describedby="yearsError" />
           <span>שנים</span>
         </label>
         <small id="yearsError" class="field-error"></small>
@@ -155,11 +155,11 @@
       </aside>
       <div class="section-heading result-heading">
         <span id="forecastEyebrow" class="eyebrow">שלב 4 · תחזית בסיסית</span>
-        <h1 id="forecastTitle">זו נקודת הפתיחה שלך</h1>
+        <h1 id="forecastTitle" tabindex="-1">זו נקודת הפתיחה שלך</h1>
         <p id="forecastModeDescription">הסכומים מוצגים בשקלים של היום.</p>
       </div>
 
-      <section class="forecast-hero" aria-live="polite" aria-atomic="false">
+      <section class="forecast-hero">
         <div class="projection-primary">
           <span>קצבה חודשית משוערת לפני מס</span>
           <strong id="headlinePension">—</strong>
@@ -172,6 +172,7 @@
         </div>
         <p id="horizonSummary" class="horizon-summary">—</p>
       </section>
+      <p id="forecastAnnouncement" class="visually-hidden" aria-live="polite" aria-atomic="true"></p>
 
       <section id="simulatorPanel" class="simulator-panel hidden" aria-labelledby="simulatorTitle">
         <div class="simulator-heading">
@@ -186,7 +187,7 @@
       </section>
 
       <section class="assumptions-panel" aria-labelledby="assumptionsTitle">
-        <div><span class="eyebrow">המספרים שמאחורי התחזית</span><h2 id="assumptionsTitle">הנחות גלויות</h2></div>
+        <div><span class="eyebrow">נקודת הייחוס להשוואה</span><h2 id="assumptionsTitle">הנחות הבסיס</h2></div>
         <dl id="forecastAssumptions"></dl>
       </section>
 
@@ -202,14 +203,14 @@
     </section>
   </main>
 
-  <script src="engine.js?v=20260823-report-first"></script>
+  <script src="engine.js?v=20260831-audit"></script>
   <script src="financial-normalizer.js?v=20260823-report-first"></script>
   <script src="pension-report-parser.js?v=20260823-report-first"></script>
   <script src="demo-fixture.js?v=20260828-demo"></script>
   <script src="local-document-pipeline.js?v=20260823-report-first"></script>
   <script src="document-extraction.js?v=20260823-report-first"></script>
-  <script src="simulator-config.js?v=20260825-pr2"></script>
-  <script src="simulator.js?v=20260825-pr2"></script>
-  <script src="app.js?v=20260825-pr2"></script>
+  <script src="simulator-config.js?v=20260831-audit"></script>
+  <script src="simulator.js?v=20260831-audit"></script>
+  <script src="app.js?v=20260831-audit"></script>
 </body>
 </html>

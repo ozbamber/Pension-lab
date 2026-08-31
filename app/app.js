@@ -10,6 +10,9 @@
   if (!E || !D || !R || !DEMO || !S || !C) throw new Error('Pension Lab dependencies are missing.');
 
   const SESSION_KEY = 'pension-lab-report-first-session-v1';
+  const SESSION_SENSITIVE_KEYS = new Set([
+    'raw', 'rawText', 'directText', 'tokenText', 'tokens', 'evidenceTokens', 'sourceText', 'ocrText',
+  ]);
   const DEFAULT_ASSUMPTIONS = C.BASELINE;
   const demoMode = DEMO.isDemoMode();
   const volatileStorage = new Map();
@@ -29,26 +32,41 @@
   let simulatorComparison = null;
   let simulatorRenderFrame = null;
   let renderedSimulatorBaseline = null;
+  let simulatorAnnouncementTimer = null;
 
   function storageGet(key) {
+    if (volatileStorage.has(key)) return volatileStorage.get(key);
     try { return window.sessionStorage.getItem(key); }
-    catch (_) { return volatileStorage.get(key) ?? null; }
+    catch (_) { return null; }
   }
 
   function storageSet(key, value) {
-    try { window.sessionStorage.setItem(key, value); }
+    try {
+      window.sessionStorage.setItem(key, value);
+      volatileStorage.delete(key);
+    }
     catch (_) { volatileStorage.set(key, value); }
   }
 
   function storageRemove(key) {
+    volatileStorage.delete(key);
     try { window.sessionStorage.removeItem(key); }
-    catch (_) { volatileStorage.delete(key); }
+    catch (_) {}
   }
 
   function deepClone(value) { return value == null ? value : JSON.parse(JSON.stringify(value)); }
 
+  function stripSessionSensitiveData(value) {
+    if (Array.isArray(value)) return value.map(stripSessionSensitiveData);
+    if (!value || typeof value !== 'object') return value;
+    return Object.fromEntries(Object.entries(value)
+      .filter(([key]) => !SESSION_SENSITIVE_KEYS.has(key))
+      .map(([key, child]) => [key, stripSessionSensitiveData(child)]));
+  }
+
   function sessionSafeReportState(state) {
-    const copy = deepClone(state);
+    const copy = stripSessionSensitiveData(deepClone(state));
+    if (!copy || typeof copy !== 'object') return copy;
     copy.contributionHistory = (copy.contributionHistory || []).map((row) => ({
       ...row,
       evidence: row.evidence ? {
@@ -71,10 +89,19 @@
   }
 
   function setInput(id, value, scale = 1) {
-    $(id).value = value == null || !Number.isFinite(Number(value)) ? '' : String(Math.round(Number(value) * scale * 10000) / 10000);
+    const missing = value == null || (typeof value === 'string' && !value.trim());
+    const numeric = Number(value);
+    const scaled = numeric * scale;
+    if (missing || !Number.isFinite(numeric) || !Number.isFinite(scaled)) {
+      $(id).value = '';
+      return;
+    }
+    const rounded = Math.round(scaled * 10000) / 10000;
+    $(id).value = String(Number.isFinite(rounded) ? rounded : scaled);
   }
 
   function formatMoney(value, options = {}) {
+    if (value == null || (typeof value === 'string' && !value.trim())) return '—';
     const numeric = Number(value);
     if (!Number.isFinite(numeric)) return '—';
     const digits = options.decimals == null ? 0 : options.decimals;
@@ -82,9 +109,10 @@
   }
 
   function formatPercentRatio(value, digits = 2) {
-    if (!Number.isFinite(Number(value))) return '—';
+    if (value == null || (typeof value === 'string' && !value.trim()) || !Number.isFinite(Number(value))) return '—';
     const fixed = (Number(value) * 100).toFixed(digits);
-    return `${fixed.replace(/(?:\.0+|(?<=\.\d*[1-9])0+)$/, '')}%`;
+    const trimmed = fixed.includes('.') ? fixed.replace(/0+$/, '').replace(/\.$/, '') : fixed;
+    return `${trimmed}%`;
   }
 
   function escapeHtml(value) {
@@ -112,6 +140,53 @@
       },
       evidence: {},
       review: { requiresReview: true, issues: [] },
+    };
+  }
+
+  function normalizedPersistedNumber(value) {
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  }
+
+  function normalizeSessionReportState(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const objectRows = (candidate) => (Array.isArray(candidate)
+      ? candidate.filter((item) => item && typeof item === 'object' && !Array.isArray(item))
+      : []);
+    const incoming = stripSessionSensitiveData(deepClone(value));
+    const base = emptyReportState();
+    const fees = incoming.fees && typeof incoming.fees === 'object' && !Array.isArray(incoming.fees) ? incoming.fees : {};
+    const derived = incoming.derived && typeof incoming.derived === 'object' && !Array.isArray(incoming.derived) ? incoming.derived : {};
+    const report = incoming.report && typeof incoming.report === 'object' && !Array.isArray(incoming.report) ? incoming.report : {};
+    const review = incoming.review && typeof incoming.review === 'object' && !Array.isArray(incoming.review) ? incoming.review : {};
+    return {
+      ...base,
+      ...incoming,
+      currentBalance: normalizedPersistedNumber(incoming.currentBalance),
+      report: { ...base.report, ...report },
+      fees: {
+        ...base.fees,
+        ...fees,
+        depositRate: normalizedPersistedNumber(fees.depositRate),
+        balanceRate: normalizedPersistedNumber(fees.balanceRate),
+      },
+      derived: {
+        ...base.derived,
+        ...derived,
+        monthsUsed: normalizedPersistedNumber(derived.monthsUsed) ?? 0,
+        baselineMonthlyContribution: normalizedPersistedNumber(derived.baselineMonthlyContribution),
+        averageReportedPensionSalary: normalizedPersistedNumber(derived.averageReportedPensionSalary),
+        employeeContributionRate: normalizedPersistedNumber(derived.employeeContributionRate),
+        employerContributionRate: normalizedPersistedNumber(derived.employerContributionRate),
+        severanceRate: normalizedPersistedNumber(derived.severanceRate),
+      },
+      contributionHistory: objectRows(incoming.contributionHistory),
+      normalizedContributionMonths: objectRows(incoming.normalizedContributionMonths),
+      evidence: incoming.evidence && typeof incoming.evidence === 'object' && !Array.isArray(incoming.evidence) ? incoming.evidence : {},
+      review: {
+        ...base.review,
+        ...review,
+        issues: objectRows(review.issues),
+      },
     };
   }
 
@@ -154,21 +229,32 @@
     try {
       const payload = JSON.parse(raw);
       if (payload.version !== 1 || !payload.pensionReportState) return false;
-      pensionReportState = payload.pensionReportState;
-      yearsUntilRetirement = Number.isFinite(Number(payload.yearsUntilRetirement)) ? Number(payload.yearsUntilRetirement) : null;
+      const scrubbedSessionState = stripSessionSensitiveData(payload.pensionReportState);
+      const mustRewriteSensitiveSession = JSON.stringify(scrubbedSessionState) !== JSON.stringify(payload.pensionReportState);
+      pensionReportState = normalizeSessionReportState(scrubbedSessionState);
+      if (!pensionReportState) return false;
+      const restoredYears = payload.yearsUntilRetirement;
+      yearsUntilRetirement = Number.isInteger(restoredYears) && restoredYears >= 1 && restoredYears <= 80 ? restoredYears : null;
       moneyMode = payload.moneyMode === 'nominal' ? 'nominal' : 'real';
-      userCorrections = payload.userCorrections && typeof payload.userCorrections === 'object' ? payload.userCorrections : {};
-      flowStep = Math.max(2, Math.min(4, Number(payload.flowStep) || 2));
-      if (flowStep === 4 && yearsUntilRetirement) {
-        try {
-          initializeSimulator();
-          projection = simulatorBaseline.projection;
-        } catch (_) {
-          flowStep = 2;
-          projection = null;
-          resetSimulatorState();
+      userCorrections = {};
+      ['currentBalance', 'baselineMonthlyContribution', 'averageReportedPensionSalary', 'depositFee', 'balanceFee'].forEach((key) => {
+        if (payload.userCorrections?.[key] === true) userCorrections[key] = true;
+      });
+      flowStep = [2, 3, 4].includes(payload.flowStep) ? payload.flowStep : 2;
+      if (flowStep === 4) {
+        if (yearsUntilRetirement == null) flowStep = 3;
+        else {
+          try {
+            initializeSimulator();
+            projection = simulatorBaseline.projection;
+          } catch (_) {
+            flowStep = 2;
+            projection = null;
+            resetSimulatorState();
+          }
         }
       }
+      if (mustRewriteSensitiveSession) persistSession();
       return true;
     } catch (_) {
       return false;
@@ -189,15 +275,39 @@
     $('moneyModeControl').classList.toggle('hidden', flowStep !== 4);
     if (!options.skipPersist && pensionReportState) persistSession();
     if (!options.skipScroll) window.scrollTo({ top: 0, behavior: options.instant ? 'auto' : 'smooth' });
+    if (options.focusTarget) {
+      window.requestAnimationFrame(() => $(options.focusTarget)?.focus({ preventScroll: true }));
+    }
   }
 
   function setSourceChip(id, value, correctionKey) {
     const chip = $(id);
     const corrected = Boolean(userCorrections[correctionKey]);
-    const missing = value == null || !Number.isFinite(Number(value));
-    chip.textContent = corrected ? 'תוקן ידנית' : missing ? 'נדרש אישור' : 'מהדוח';
+    const missing = value == null || (typeof value === 'string' && !value.trim()) || !Number.isFinite(Number(value));
+    chip.textContent = missing ? 'נדרש אישור' : corrected ? 'תוקן ידנית' : 'מהדוח';
     chip.classList.toggle('needs-review', missing);
-    chip.classList.toggle('user-source', corrected);
+    chip.classList.toggle('user-source', corrected && !missing);
+  }
+
+  function setSalarySourceChip(value) {
+    if (value == null || (typeof value === 'string' && !value.trim()) || !Number.isFinite(Number(value))) {
+      $('salarySource').textContent = 'לא נמצא · לפי סכום';
+      $('salarySource').classList.remove('needs-review', 'user-source');
+      return;
+    }
+    setSourceChip('salarySource', value, 'averageReportedPensionSalary');
+  }
+
+  function updateFeesSourceChip() {
+    const depositValue = pensionReportState?.fees?.depositRate;
+    const balanceValue = pensionReportState?.fees?.balanceRate;
+    const depositMissing = depositValue == null || (typeof depositValue === 'string' && !depositValue.trim()) || !Number.isFinite(Number(depositValue));
+    const balanceMissing = balanceValue == null || (typeof balanceValue === 'string' && !balanceValue.trim()) || !Number.isFinite(Number(balanceValue));
+    const missing = depositMissing || balanceMissing;
+    const corrected = Boolean(userCorrections.depositFee || userCorrections.balanceFee);
+    $('feesSource').textContent = missing ? 'נדרש אישור' : corrected ? 'תוקן ידנית' : 'מהדוח';
+    $('feesSource').classList.toggle('needs-review', missing);
+    $('feesSource').classList.toggle('user-source', corrected && !missing);
   }
 
   function renderHistory() {
@@ -214,6 +324,10 @@
       const status = row.requiresReview || ['ambiguous', 'excluded'].includes(row.normalizationStatus) ? 'לבדיקה'
         : row.normalizationStatus === 'duplicate-preserved' ? 'כפילות שמורה' : 'נכלל בממוצע';
       const statusClass = status === 'נכלל בממוצע' ? 'included' : 'review';
+      const confidence = row.confidence == null || (typeof row.confidence === 'string' && !row.confidence.trim())
+        ? null
+        : Number(row.confidence);
+      const confidenceText = Number.isFinite(confidence) ? `${Math.round(confidence * 100)}%` : '—';
       return `<article class="history-row ${statusClass}">
         <div class="history-month"><strong>${escapeHtml(row.salaryMonth || 'חודש לא מזוהה')}</strong><span>${escapeHtml(row.employerName || 'מעסיק לא צוין בדוח')}</span><b>${status}</b></div>
         <dl>
@@ -223,7 +337,7 @@
           <div><dt>פיצויים</dt><dd>${formatMoney(row.severanceContribution)}</dd></div>
           <div class="history-total"><dt>סה״כ הפקדה</dt><dd>${formatMoney(row.totalContribution)}</dd></div>
         </dl>
-        <small>עמוד ${escapeHtml(row.sourcePage || '—')} · ביטחון ${Math.round((Number(row.confidence) || 0) * 100)}%</small>
+        <small>עמוד ${escapeHtml(row.sourcePage || '—')} · ביטחון ${confidenceText}</small>
       </article>`;
     }).join('');
   }
@@ -251,11 +365,8 @@
     setInput('balanceFee', pensionReportState.fees?.balanceRate, 100);
     setSourceChip('currentBalanceSource', pensionReportState.currentBalance, 'currentBalance');
     setSourceChip('contributionSource', pensionReportState.derived?.baselineMonthlyContribution, 'baselineMonthlyContribution');
-    setSourceChip('salarySource', pensionReportState.derived?.averageReportedPensionSalary, 'averageReportedPensionSalary');
-    const feesMissing = pensionReportState.fees?.depositRate == null || pensionReportState.fees?.balanceRate == null;
-    $('feesSource').textContent = userCorrections.depositFee || userCorrections.balanceFee ? 'תוקן ידנית' : feesMissing ? 'נדרש אישור' : 'מהדוח';
-    $('feesSource').classList.toggle('needs-review', feesMissing);
-    $('feesSource').classList.toggle('user-source', Boolean(userCorrections.depositFee || userCorrections.balanceFee));
+    setSalarySourceChip(pensionReportState.derived?.averageReportedPensionSalary);
+    updateFeesSourceChip();
 
     const monthsUsed = Number(pensionReportState.derived?.monthsUsed) || 0;
     $('contributionMonthsNote').textContent = monthsUsed ? `מבוסס על ${monthsUsed} ${monthsUsed === 1 ? 'חודש הפקדה' : 'חודשי הפקדה'}` : 'לא נמצא חודש הפקדה אמין — נדרש אישור ידני';
@@ -279,12 +390,26 @@
   }
 
   function clearErrors() {
-    ['currentBalanceError', 'baselineContributionError', 'depositFeeError', 'balanceFeeError', 'yearsError'].forEach((id) => { $(id).textContent = ''; });
-    document.querySelectorAll('.invalid').forEach((element) => element.classList.remove('invalid'));
+    [
+      ['currentBalance', 'currentBalanceError'],
+      ['baselineMonthlyContribution', 'baselineContributionError'],
+      ['depositFee', 'depositFeeError'],
+      ['balanceFee', 'balanceFeeError'],
+      ['yearsUntilRetirement', 'yearsError'],
+    ].forEach(([inputId, errorId]) => clearFieldError(inputId, errorId));
+  }
+
+  function clearFieldError(inputId, errorId) {
+    $(inputId).classList.remove('invalid');
+    $(inputId).setAttribute('aria-invalid', 'false');
+    $(errorId).textContent = '';
+    $(errorId).removeAttribute('role');
   }
 
   function errorFor(inputId, errorId, message) {
     $(inputId).classList.add('invalid');
+    $(inputId).setAttribute('aria-invalid', 'true');
+    $(errorId).setAttribute('role', 'alert');
     $(errorId).textContent = message;
   }
 
@@ -322,13 +447,20 @@
       errorFor('balanceFee', 'balanceFeeError', 'הזינו דמי ניהול מצבירה בין 0% ל־20%.'); valid = false;
     }
     if (valid) persistSession();
+    else {
+      const firstInvalid = document.querySelector('#reviewStep .invalid');
+      window.requestAnimationFrame(() => firstInvalid?.focus());
+    }
     return valid;
   }
 
   function signedMoney(value) {
-    const numeric = Number(value) || 0;
+    if (value == null || (typeof value === 'string' && !value.trim()) || !Number.isFinite(Number(value))) return '';
+    const numeric = Number(value);
     if (Math.abs(numeric) < 0.005) return '';
-    return `${numeric > 0 ? '+' : '-'}${formatMoney(Math.abs(numeric))}`;
+    return new Intl.NumberFormat('he-IL', {
+      style: 'currency', currency: 'ILS', maximumFractionDigits: 0, minimumFractionDigits: 0, signDisplay: 'always',
+    }).format(numeric);
   }
 
   function resetSimulatorState() {
@@ -336,12 +468,14 @@
       if (window.cancelAnimationFrame) window.cancelAnimationFrame(simulatorRenderFrame);
       else window.clearTimeout(simulatorRenderFrame);
     }
+    if (simulatorAnnouncementTimer != null) window.clearTimeout(simulatorAnnouncementTimer);
     simulatorBaseline = null;
     simulatorControls = null;
     selectedSimulatorScenario = null;
     simulatorComparison = null;
     simulatorRenderFrame = null;
     renderedSimulatorBaseline = null;
+    simulatorAnnouncementTimer = null;
     if ($('simulatorPanel')) $('simulatorPanel').classList.add('hidden');
     if ($('simulatorControls')) $('simulatorControls').innerHTML = '';
   }
@@ -360,6 +494,12 @@
     if (status === 'central') return C.COPY.centralStatus;
     if (status === 'moderate') return C.COPY.moderateStatus;
     return C.COPY.extremeStatus;
+  }
+
+  function simulatorStatusShortText(status) {
+    if (status === 'central') return 'טווח מרכזי';
+    if (status === 'moderate') return 'מחוץ למרכז';
+    return 'קיצון';
   }
 
   function percentageForConfigValue(config, value, digits = config.valueDigits || 0) {
@@ -416,6 +556,25 @@
     return percentageForConfigValue(config, value, config.tickDigits || 0);
   }
 
+  function nativeRangeStep(config) {
+    const scaled = [config.min, config.max, config.baselineValue, config.step].map((value) => Number(value) * 100);
+    const decimalPlaces = Math.min(6, scaled.reduce((maximum, value) => {
+      const normalized = value.toFixed(6).replace(/0+$/, '').replace(/\.$/, '');
+      return Math.max(maximum, normalized.includes('.') ? normalized.split('.')[1].length : 0);
+    }, 0));
+    const scale = 10 ** decimalPlaces;
+    const integers = scaled.map((value) => Math.round(value * scale));
+    const gcd = (left, right) => {
+      let a = Math.abs(left);
+      let b = Math.abs(right);
+      while (b) [a, b] = [b, a % b];
+      return a;
+    };
+    const step = [integers[3], integers[2] - integers[0], integers[1] - integers[0]]
+      .reduce((current, value) => gcd(current, value));
+    return String(step / scale);
+  }
+
   function renderSimulatorSlider(key, config, options = {}) {
     const value = simulatorControls[key];
     const status = S.scenarioRangeStatus(config, value);
@@ -428,7 +587,9 @@
       <div class="simulator-control-header">
         <div class="simulator-control-title">
           <h3 id="${id}-label">${escapeHtml(config.label)}</h3>
+          <span id="${id}-unit" class="visually-hidden">${config.unit === 'multiplier' ? 'אחוז מנקודת הבסיס' : 'באחוזים'}</span>
           <button type="button" class="simulator-info-button" data-simulator-info="${key}" aria-controls="${id}-info" aria-expanded="false" aria-label="מידע על ${escapeHtml(config.label)}">ⓘ</button>
+          <span class="simulator-range-status" data-simulator-status-visible="${key}" aria-hidden="true">${escapeHtml(simulatorStatusShortText(status))}</span>
         </div>
         <div class="simulator-selected-value">
           <output id="${id}-value" data-simulator-value="${key}">${escapeHtml(formatSimulatorValue(key, config, value))}</output>
@@ -436,7 +597,7 @@
         </div>
       </div>
       <div class="simulator-range-wrap" dir="ltr">
-        <input id="${id}-input" class="simulator-range" data-simulator-input="${key}" type="range" min="0" max="${C.SLIDER_POSITION_MAX}" step="1" value="${S.valueToPosition(config, value)}" aria-labelledby="${id}-label" aria-describedby="${id}-status" aria-valuemin="${config.unit === 'multiplier' ? config.min * 100 : config.min * 100}" aria-valuemax="${config.unit === 'multiplier' ? config.max * 100 : config.max * 100}" aria-valuenow="${config.unit === 'multiplier' ? value * 100 : value * 100}" aria-valuetext="${escapeHtml(simulatorValueAriaText(key, config, value))}" />
+        <input id="${id}-input" class="simulator-range" data-simulator-input="${key}" type="range" min="${config.min * 100}" max="${config.max * 100}" step="${nativeRangeStep(config)}" value="${value * 100}" aria-labelledby="${id}-label ${id}-unit" aria-describedby="${id}-status" aria-valuemin="${config.min * 100}" aria-valuemax="${config.max * 100}" aria-valuenow="${value * 100}" aria-valuetext="${escapeHtml(simulatorValueAriaText(key, config, value))}" />
         <span class="simulator-baseline-marker" aria-hidden="true"><i></i><b>${escapeHtml(C.COPY.baseline)}</b></span>
       </div>
       <div class="simulator-ticks" dir="ltr" aria-hidden="true"><span>${escapeHtml(sliderTickLabel(config, config.min))}</span><span class="simulator-central-tick">${escapeHtml(sliderTickLabel(config, config.centralMin))}–${escapeHtml(sliderTickLabel(config, config.centralMax))}</span><span>${escapeHtml(sliderTickLabel(config, config.max))}</span></div>
@@ -475,6 +636,14 @@
     if (!open) delete button.dataset.pinned;
   }
 
+  function focusSimulatorInfoTrigger(key) {
+    const button = document.querySelector(`[data-simulator-info="${key}"]`);
+    if (!button) return;
+    button.dataset.suppressFocusOpen = 'true';
+    button.focus({ preventScroll: true });
+    window.queueMicrotask(() => { delete button.dataset.suppressFocusOpen; });
+  }
+
   function syncSimulatorControlUi(key) {
     if (!simulatorBaseline || !simulatorControls) return;
     const config = simulatorBaseline.controlsConfig[key];
@@ -488,12 +657,14 @@
     const output = control.querySelector('[data-simulator-value]');
     const statusNode = control.querySelector('[data-simulator-status]');
     if (input) {
-      input.value = String(S.valueToPosition(config, value));
+      input.value = String(value * 100);
       input.setAttribute('aria-valuenow', String(value * 100));
       input.setAttribute('aria-valuetext', simulatorValueAriaText(key, config, value));
     }
     if (output) output.textContent = formatSimulatorValue(key, config, value);
     if (statusNode) statusNode.textContent = simulatorStatusText(status);
+    const visualStatus = control.querySelector('[data-simulator-status-visible]');
+    if (visualStatus) visualStatus.textContent = simulatorStatusShortText(status);
     const amount = control.querySelector('[data-simulator-amount]');
     if (amount && key === 'contribution') {
       amount.textContent = config.unit === 'multiplier'
@@ -517,8 +688,7 @@
     document.querySelectorAll('[data-simulator-input]').forEach((input) => {
       input.addEventListener('input', () => {
         const key = input.dataset.simulatorInput;
-        const config = simulatorBaseline.controlsConfig[key];
-        setSimulatorControlValue(key, S.positionToValue(config, input.value), { snap: true });
+        setSimulatorControlValue(key, Number(input.value) / 100, { snap: false });
       });
       input.addEventListener('keydown', (event) => {
         const key = input.dataset.simulatorInput;
@@ -529,7 +699,7 @@
           event.preventDefault();
           const raw = event.key === 'Home' ? config.min : event.key === 'End' ? config.max
             : simulatorControls[key] + stepDirection * config.step;
-          setSimulatorControlValue(key, raw, { snap: true });
+          setSimulatorControlValue(key, raw, { snap: false });
         }
       });
     });
@@ -537,13 +707,33 @@
       const key = button.dataset.simulatorInfo;
       button.addEventListener('click', () => {
         const pinned = button.dataset.pinned === 'true';
-        setSimulatorInfoOpen(key, !pinned, !pinned);
+        if (pinned) {
+          setSimulatorInfoOpen(key, false);
+          return;
+        }
+        setSimulatorInfoOpen(key, true, true);
+        $(`simulator-${key}-info`)?.querySelector('[data-simulator-info-close]')?.focus({ preventScroll: true });
       });
       button.addEventListener('mouseenter', () => { if (button.dataset.pinned !== 'true') setSimulatorInfoOpen(key, true); });
-      button.addEventListener('focus', () => { if (button.dataset.pinned !== 'true') setSimulatorInfoOpen(key, true); });
+      button.addEventListener('focus', () => {
+        if (button.dataset.pinned !== 'true' && button.dataset.suppressFocusOpen !== 'true') setSimulatorInfoOpen(key, true);
+      });
+      const control = button.closest('[data-simulator-control]');
+      control?.addEventListener('mouseleave', () => {
+        if (button.dataset.pinned !== 'true' && !control.matches(':focus-within')) setSimulatorInfoOpen(key, false);
+      });
+      control?.addEventListener('focusout', () => {
+        window.queueMicrotask(() => {
+          if (button.dataset.pinned !== 'true' && !control.contains(document.activeElement)) setSimulatorInfoOpen(key, false);
+        });
+      });
     });
     document.querySelectorAll('[data-simulator-info-close]').forEach((button) => {
-      button.addEventListener('click', () => setSimulatorInfoOpen(button.dataset.simulatorInfoClose, false));
+      button.addEventListener('click', () => {
+        const key = button.dataset.simulatorInfoClose;
+        setSimulatorInfoOpen(key, false);
+        focusSimulatorInfoTrigger(key);
+      });
     });
   }
 
@@ -565,11 +755,19 @@
     $('headlineBalanceComparison').textContent = `בסיס ${formatMoney(baselineBalance)}${atBaseline ? '' : ` · ${signedMoney(balanceDelta)}`}`;
     $('headlinePensionComparison').dataset.delta = atBaseline ? 'neutral' : pensionDelta >= 0 ? 'positive' : 'negative';
     $('headlineBalanceComparison').dataset.delta = atBaseline ? 'neutral' : balanceDelta >= 0 ? 'positive' : 'negative';
+    $('forecastTitle').textContent = atBaseline
+      ? (demoMode ? 'נקודת פתיחה סינתטית' : 'זו נקודת הפתיחה שלך')
+      : 'התרחיש שבחרת';
     $('horizonSummary').textContent = `בעוד ${yearsUntilRetirement} שנים · ${baseline.monthsUntilRetirement} חודשים בדיוק`;
     $('forecastModeDescription').textContent = real
       ? 'הסכומים מוצגים בשקלים של היום, לאחר קיזוז השפעת האינפלציה.'
       : 'הסכומים מוצגים בשקלים עתידיים וכוללים את הנחת האינפלציה.';
     document.querySelectorAll('[data-money-mode]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.moneyMode === moneyMode)));
+    if (simulatorAnnouncementTimer != null) window.clearTimeout(simulatorAnnouncementTimer);
+    simulatorAnnouncementTimer = window.setTimeout(() => {
+      simulatorAnnouncementTimer = null;
+      $('forecastAnnouncement').textContent = `קצבה חודשית ${formatMoney(pension)}. צבירה בפרישה ${formatMoney(balance)}.${atBaseline ? ' תרחיש הבסיס.' : ` שינוי בקצבה ${signedMoney(pensionDelta)}.`}`;
+    }, 320);
   }
 
   function renderForecastAssumptions() {
@@ -606,7 +804,9 @@
   function setSimulatorControlValue(key, rawValue, options = {}) {
     if (!simulatorBaseline || !simulatorControls) return;
     const config = simulatorBaseline.controlsConfig[key];
-    const clamped = Math.min(config.max, Math.max(config.min, Number(rawValue)));
+    const numeric = rawValue == null || (typeof rawValue === 'string' && !rawValue.trim()) ? NaN : Number(rawValue);
+    if (!config || !Number.isFinite(numeric)) return;
+    const clamped = Math.min(config.max, Math.max(config.min, numeric));
     const value = options.snap ? S.snapToStep(config, clamped) : clamped;
     simulatorControls = { ...simulatorControls, [key]: value };
     syncSimulatorControlUi(key);
@@ -665,7 +865,7 @@
     userCorrections = {};
     resetSimulatorState();
     renderReview();
-    showStep(2);
+    showStep(2, { focusTarget: 'reviewTitle' });
   }
 
   async function handleReportSelection() {
@@ -691,16 +891,22 @@
 
   function markCorrection(inputId, correctionKey) {
     $(inputId).addEventListener('input', () => {
-      userCorrections[correctionKey] = true;
-      clearErrors();
+      const value = finiteInput(inputId);
+      if (value == null) delete userCorrections[correctionKey];
+      else userCorrections[correctionKey] = true;
+      const errorId = {
+        currentBalance: 'currentBalanceError',
+        baselineMonthlyContribution: 'baselineContributionError',
+        depositFee: 'depositFeeError',
+        balanceFee: 'balanceFeeError',
+      }[correctionKey];
+      if (errorId) clearFieldError(inputId, errorId);
       if (pensionReportState) commitReviewInputs();
       if (correctionKey === 'currentBalance') setSourceChip('currentBalanceSource', finiteInput(inputId), correctionKey);
       if (correctionKey === 'baselineMonthlyContribution') setSourceChip('contributionSource', finiteInput(inputId), correctionKey);
-      if (correctionKey === 'averageReportedPensionSalary') setSourceChip('salarySource', finiteInput(inputId), correctionKey);
+      if (correctionKey === 'averageReportedPensionSalary') setSalarySourceChip(finiteInput(inputId));
       if (correctionKey === 'depositFee' || correctionKey === 'balanceFee') {
-        $('feesSource').textContent = 'תוקן ידנית';
-        $('feesSource').classList.remove('needs-review');
-        $('feesSource').classList.add('user-source');
+        updateFeesSourceChip();
       }
     });
   }
@@ -722,7 +928,7 @@
     $('yearsUntilRetirement').value = '';
     storageRemove(SESSION_KEY);
     $('sessionRestoreNotice').classList.add('hidden');
-    showStep(1, { skipPersist: true });
+    showStep(1, { skipPersist: true, focusTarget: 'uploadTitle' });
   }
 
   function initializeDemoMode() {
@@ -746,8 +952,17 @@
 
   $('pensionReportFile').addEventListener('change', handleReportSelection);
   $('cancelProcessing').addEventListener('click', () => processingController?.abort());
-  $('backToUpload').addEventListener('click', () => showStep(1));
-  $('continueToYears').addEventListener('click', () => { if (validateReview()) { renderReview(); showStep(3); $('yearsUntilRetirement').focus(); } });
+  $('backToUpload').addEventListener('click', () => {
+    $('pensionReportFile').value = '';
+    $('pensionReportStatus').textContent = 'לא נבחר קובץ';
+    showStep(1, { focusTarget: 'uploadTitle' });
+  });
+  $('continueToYears').addEventListener('click', () => {
+    if (validateReview()) {
+      renderReview();
+      showStep(3, { focusTarget: 'yearsUntilRetirement' });
+    }
+  });
   $('fundTypeConfirmation').addEventListener('change', () => {
     if (!pensionReportState) return;
     const confirmed = $('fundTypeConfirmation').value;
@@ -767,13 +982,15 @@
       : { requiresReview: false, issues: [] };
     persistSession();
     renderReview();
+    window.requestAnimationFrame(() => $(confirmed === 'new_pension' ? 'continueToYears' : 'routingNotice')?.focus({ preventScroll: true }));
   });
-  $('backToReview').addEventListener('click', () => showStep(2));
+  $('backToReview').addEventListener('click', () => showStep(2, { focusTarget: 'reviewTitle' }));
   $('calculateForecast').addEventListener('click', () => {
     clearErrors();
     const years = finiteInput('yearsUntilRetirement');
     if (years == null || !Number.isInteger(years) || years < 1 || years > 80) {
       errorFor('yearsUntilRetirement', 'yearsError', 'הזינו מספר שלם בין שנה אחת ל־80 שנים.');
+      $('yearsUntilRetirement').focus();
       return;
     }
     if (!validateReview()) { showStep(2); return; }
@@ -783,12 +1000,13 @@
       initializeSimulator();
       projection = simulatorBaseline.projection;
       renderForecast();
-      showStep(4);
+      showStep(4, { focusTarget: 'forecastTitle' });
     } catch (error) {
-      $('yearsError').textContent = error.message;
+      errorFor('yearsUntilRetirement', 'yearsError', 'לא ניתן לחשב עם הערכים שהוזנו. חזרו לבדיקת הדוח וודאו שהיתרה וההפקדה בטווח סביר.');
+      $('yearsUntilRetirement').focus();
     }
   });
-  $('editYears').addEventListener('click', () => showStep(3));
+  $('editYears').addEventListener('click', () => showStep(3, { focusTarget: 'yearsUntilRetirement' }));
   $('startOver').addEventListener('click', resetFlow);
   $('resetSimulator').addEventListener('click', resetSimulatorToBaseline);
   document.querySelectorAll('[data-money-mode]').forEach((button) => button.addEventListener('click', () => {
@@ -799,9 +1017,20 @@
   ['currentBalance', 'baselineMonthlyContribution', 'averageReportedPensionSalary'].forEach((id) => markCorrection(id, id));
   markCorrection('depositFee', 'depositFee');
   markCorrection('balanceFee', 'balanceFee');
-  $('yearsUntilRetirement').addEventListener('input', () => { $('yearsError').textContent = ''; $('yearsUntilRetirement').classList.remove('invalid'); });
+  $('yearsUntilRetirement').addEventListener('input', () => clearFieldError('yearsUntilRetirement', 'yearsError'));
+  $('yearsUntilRetirement').addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      $('calculateForecast').click();
+    }
+  });
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') closeSimulatorInfo();
+    if (event.key === 'Escape') {
+      const panel = document.querySelector('.simulator-info:not(.hidden)');
+      const key = panel?.closest('[data-simulator-control]')?.dataset.simulatorControl;
+      closeSimulatorInfo();
+      if (key) focusSimulatorInfoTrigger(key);
+    }
   });
 
   if (demoMode) {

@@ -15,7 +15,8 @@
   function percentText(ratio, digits = 0) {
     const numeric = Number(ratio) * 100;
     const fixed = numeric.toFixed(digits);
-    return `${fixed.replace(/(?:\.0+|(?<=\.\d*[1-9])0+)$/, '')}%`;
+    const trimmed = fixed.includes('.') ? fixed.replace(/0+$/, '').replace(/\.$/, '') : fixed;
+    return `${trimmed}%`;
   }
 
   const REVIEWED_DATE = '2026-08-25';
@@ -88,7 +89,7 @@
       moderateMax: 0.09,
       baselineValue: BASELINE.nominalReturnRate,
       tickDigits: 0,
-      valueDigits: 1,
+      valueDigits: 2,
       sourceIds: ['returnAssurance'],
       info: {
         title: 'תשואה נומינלית',

@@ -226,6 +226,50 @@ test('old-pension and unknown fund states cannot build a simulator baseline', ()
   assert.throws(() => S.buildSimulatorBaseline(reportState({ fundType: 'unknown', supportedForCurrentForecast: false }), 20), /new-pension/);
 });
 
+test('null, blank and non-finite controls fall back without changing the baseline', () => {
+  const baseline = S.buildSimulatorBaseline(reportState(), 20);
+  const selected = S.applySimulatorOverrides(baseline, {
+    nominalReturn: null,
+    inflation: '',
+    contribution: NaN,
+    depositFee: Infinity,
+    balanceFee: undefined,
+  });
+  assert.deepStrictEqual(selected.controls, baseline.baselineControls);
+  assert.strictEqual(S.controlsAtBaseline(baseline, selected.controls), true);
+  assert.strictEqual(S.controlsAtBaseline(baseline, { ...baseline.baselineControls, depositFee: null }), false);
+});
+
+test('a zero contribution baseline never expands into negative money or rates', () => {
+  const baseline = S.buildSimulatorBaseline(reportState({ derived: {
+    baselineMonthlyContribution: 0, averageReportedPensionSalary: 20000, monthsUsed: 1,
+  } }), 20);
+  assert.strictEqual(baseline.contribution.type, 'rate');
+  assert.strictEqual(baseline.controlsConfig.contribution.min, 0);
+  const selected = S.applySimulatorOverrides(baseline, { contribution: baseline.controlsConfig.contribution.min });
+  assert.strictEqual(selected.selectedMonthlyContribution, 0);
+  assert.strictEqual(S.projectSimulatorScenario(selected).totalContributionsReal, 0);
+});
+
+test('an implausible contribution-to-salary ratio uses the amount-only fallback', () => {
+  const baseline = S.buildSimulatorBaseline(reportState({ derived: {
+    baselineMonthlyContribution: 4000, averageReportedPensionSalary: 1, monthsUsed: 1,
+  } }), 20);
+  assert.strictEqual(baseline.contribution.type, 'amount');
+  assert.strictEqual(baseline.contribution.averageReportedPensionSalary, null);
+  assert.strictEqual(baseline.baselineControls.contribution, 1);
+});
+
+test('snapping an expanded endpoint never exceeds the control maximum', () => {
+  const baseline = S.buildSimulatorBaseline(reportState({ derived: {
+    baselineMonthlyContribution: 6140, averageReportedPensionSalary: 20000, monthsUsed: 1,
+  } }), 20);
+  const config = baseline.controlsConfig.contribution;
+  assert(Math.abs(config.max - 0.33156) < 1e-12);
+  assert.strictEqual(S.snapToStep(config, config.max), config.max);
+  assert(S.snapToStep(config, config.max + 1) <= config.max);
+});
+
 let passed = 0;
 for (const { name, fn } of tests) {
   try {

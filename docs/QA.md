@@ -1,13 +1,13 @@
 # QA status
 
-Reviewed: **2026-08-28**.
+Reviewed: **2026-08-31**.
 
-This review covers the PR2 Interactive Pension What-If Simulator plus its query-only synthetic demo on `codex/pr2-interactive-simulator`, based directly on reviewed PR1 safety SHA `f7978fe1a15c8e2f738ec0de629e77ff736ceabb`. The normal product accepts one annual or quarterly pension report, requires trusted `new_pension` routing and one years-until-retirement answer, and then exposes a session-only what-if simulator using the unchanged projection engine. `?demo=1` constructs a clearly labeled synthetic post-extraction state and enters those same simulator APIs for product review. PR1 extraction architecture and Dataset v2 ground truth remain frozen.
+This review covers the complete PR2 product and production-release path on `codex/pr2-interactive-simulator`, including its query-only synthetic demo, based directly on reviewed PR1 safety SHA `f7978fe1a15c8e2f738ec0de629e77ff736ceabb`. The normal product accepts one annual or quarterly pension report, requires trusted `new_pension` routing and one years-until-retirement answer, and then exposes a session-only what-if simulator using the unchanged projection engine. `?demo=1` constructs a clearly labeled synthetic post-extraction state and enters those same simulator APIs for product review. PR1 extraction architecture and Dataset v2 ground truth remain frozen. Findings, resolutions, limitations, and the exact release process are recorded in `docs/PR2-AUDIT-2026-08-31.md` and `docs/RELEASE.md`.
 
 ## Completed suites
 
-- `npm run test:engine`: **23/23** projection-engine tests passed.
-- `npm run test:simulator`: **26/26** immutable what-if scenario tests plus **10/10** synthetic-demo fixture, normalization, exact-value, production-equivalence, immutability, query, horizon, and exit-URL tests passed.
+- `npm run test:engine`: **28/28** projection-engine tests passed, including strict baseline types, bounded horizons and fees, non-finite output rejection, retirement-age horizon propagation, and overlapping-break rejection.
+- `npm run test:simulator`: **30/30** immutable what-if scenario tests plus **10/10** synthetic-demo fixture, normalization, exact-value, production-equivalence, immutability, query, horizon, and exit-URL tests passed.
 - `npm run test:documents`: **10/10** document-model tests passed.
 - `npm run test:ocr`: **30/30** financial/spatial parser tests passed.
 - `npm run test:pension`: **24/24** legacy pension-report/reconciliation regressions, **14/14** pension-report-state acceptance tests, **24/24** Engine V2 table regressions, and **32/32** fund-routing/source-safety regressions passed.
@@ -17,13 +17,23 @@ This review covers the PR2 Interactive Pension What-If Simulator plus its query-
 - `npm run dataset:benchmark:browser`: all **34/34** pension PDFs completed through the real local browser pipeline; detailed supported-new and routing results appear below.
 - `npm run dataset:benchmark:compare -- --before-ref 2a6f05b8a0d38830da5ecc606dd124b99ba6ebf6`: extraction field/critical/validation metrics remained **88.2% / 96.0% / 100.0%** while the new routing contract made all **21/21** supported-new parents eligible for safe automatic acceptance.
 - `npm run test:browser:smoke`: old-pension blocking and unknown-fund confirmation passed; the complete report-only flow also passed at **1440×1000** and **390×844**, including exact 144-month projection for 12 years, real/nominal switching, no payslip or age fields, and no horizontal overflow.
-- `npm run test:browser:simulator`: supported-new gating, all five controls, combined changes, fixed baseline markers, global reset, positive/negative deltas, real/nominal consistency, keyboard interaction, desktop information UI, mobile tap information UI, session-only state, no interaction network request, and 390px overflow checks passed.
+- `npm run test:browser:simulator`: supported-new gating, strict restored-state normalization, legacy sensitive-session migration, missing-value rendering, per-field validation, all five controls, real-valued native range semantics, Chromium accessibility-tree percentage units, monotonic native stepping, symmetric custom keyboard stepping, combined changes, fixed baseline markers, global reset, positive/negative deltas, real/nominal consistency, focus transitions, desktop information UI, mobile tap information UI, session-only state, no interaction network request, finite-overflow failure, and 390px overflow checks passed.
 - `npm run test:browser:demo`: **38/38** normal/demo routing, canonical fixture, all controls, combined scenarios, positive/negative/stress deltas, reset, accessible information UI, session isolation, exit/restore, no local/IndexedDB storage, no interaction network request, LTR numeric direction, and 1440×1000/390×844 checks passed.
 - `npm run test:browser:ocr`: **5/5** native-report, local OCR, privacy/session, mobile-overflow, and cancellation groups passed.
 - `npm run test:browser:standalone`: **6/6** generated-artifact groups passed, including 10 local vendor URLs, source-equivalent demo and normal routes, native report parsing, scanned report OCR, and zero 404/console/runtime/network-loading errors.
-- `npm run build`: generated **222 files** from canonical `app/`, including `dist/pension-lab-he-standalone.html`; two consecutive builds produced identical SHA256 `9F69BF50E85C8AB887A46E0E95A5BBCD3BB0D5BB75335F516680D59A710DC0DD`.
+- `npm run build`: generated **224 files** from canonical `app/`, including `dist/pension-lab-he-standalone.html`, `dist/_headers`, and `dist/404.html`; two consecutive builds produced identical SHA256 `48FE2FC4300A6C91F6EE025D7258CDB9AB1A035215D2DE5D3ED765A89B0FBA48`.
 - `npm run check:standalone`: **9/9** authored inline script blocks passed syntax validation.
-- `node --check` over `app/`, `scripts/`, and `tests/`: **42/42** JavaScript files passed syntax validation, including the unchanged vendored JavaScript already covered by the previous count.
+- `node --check` over authored, non-vendored JavaScript in `app/`, `scripts/`, and `tests/`: **37/37** files passed syntax validation.
+
+## 2026-08-31 whole-product audit and local release gate
+
+- Three independent read-only reviews covered math/state/privacy, UI/accessibility, and repository/release readiness. Every P1/P2 code finding listed in `docs/PR2-AUDIT-2026-08-31.md` was resolved and regression-tested before release.
+- Recursive session sanitization removes raw PDF/OCR text and sensitive nested keys; legacy v1 sessions containing such keys are scrubbed on load. Clean sessions remain byte-for-byte unchanged when entering and leaving the synthetic demo.
+- Primitive-number validation now rejects booleans, arrays, numeric strings, blanks, `NaN`, infinity, malformed rows, impossible horizons, fees outside 0%–20%, overlapping career breaks, and non-finite projections instead of coercing or silently clamping them into a forecast.
+- Chromium verified visible validation/focus behavior, screen-reader percentage names and values for every range, non-color range status, bidi-safe signed deltas, keyboard symmetry, same-file upload retry, and no horizontal overflow at 390px.
+- `app/document-extraction.js` and `app/pension-report-parser.js` have an empty diff from reviewed PR1 safety SHA `f7978fe1a15c8e2f738ec0de629e77ff736ceabb`.
+- `git diff --check` passed. Two builds produced the same 224-file artifact and standalone SHA256 shown above; `_headers` and the custom Hebrew 404 page are present in `dist/`.
+- Live Preview and Production URL, deployment identifiers, exact Git SHA, HTTP/MIME/security-header/404 checks, and deployed-byte hashes are recorded below only after deployment verification; an upload alone is not counted as acceptance.
 
 ## PR2 visual and interaction review
 

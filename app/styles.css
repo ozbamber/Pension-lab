@@ -51,7 +51,7 @@ input:focus-visible,
 summary:focus-visible,
 .demo-banner a:focus-visible,
 .upload-button:focus-within {
-  outline: 3px solid rgba(211, 155, 72, 0.48);
+  outline: 3px solid #8b5b16;
   outline-offset: 3px;
 }
 
@@ -220,7 +220,7 @@ body.demo-mode .result-heading h1 { font-size: clamp(2rem, 4vw, 3.2rem); }
   display: grid;
   justify-items: center;
   gap: 5px;
-  color: #85948f;
+  color: #5f706a;
   font-size: 0.74rem;
 }
 
@@ -933,7 +933,7 @@ input.invalid { border-color: var(--danger) !important; }
   gap: 16px;
 }
 
-.simulator-control-title { min-width: 0; display: flex; align-items: center; gap: 6px; }
+.simulator-control-title { min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .simulator-control-title h3 { margin: 0; font-size: 0.98rem; font-weight: 820; }
 
 .simulator-info-button {
@@ -952,6 +952,18 @@ input.invalid { border-color: var(--danger) !important; }
 
 .simulator-info-button:hover,
 .simulator-info-button[aria-expanded="true"] { background: var(--green-light); }
+
+.simulator-range-status {
+  padding: 2px 7px;
+  color: var(--ink-soft);
+  background: rgba(255, 253, 248, 0.76);
+  border: 1px solid rgba(22, 53, 47, 0.22);
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 760;
+  line-height: 1.35;
+  white-space: nowrap;
+}
 
 .simulator-selected-value { min-width: 112px; text-align: left; direction: rtl; }
 .simulator-selected-value output {
@@ -1048,8 +1060,8 @@ input.invalid { border-color: var(--danger) !important; }
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  color: #75857f;
-  font-size: 0.67rem;
+  color: #556862;
+  font-size: 0.69rem;
   font-weight: 720;
 }
 .simulator-ticks > :last-child { text-align: right; }
@@ -1260,7 +1272,7 @@ input.invalid { border-color: var(--danger) !important; }
   .simulator-baseline-marker { top: 10px; height: 31px; }
   .simulator-baseline-marker i { height: 27px; }
   .simulator-baseline-marker b { top: 30px; font-size: 0.6rem; }
-  .simulator-ticks { font-size: 0.61rem; }
+  .simulator-ticks { font-size: 0.65rem; }
   .simulator-central-tick { max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .simulator-info:not(.hidden) {
     position: fixed;

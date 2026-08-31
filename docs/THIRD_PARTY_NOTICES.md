@@ -10,4 +10,4 @@ The OCR path is bundled locally so document processing does not depend on a CDN 
 | Tesseract `heb` trained data | 4.0.0 | Hebrew OCR language data | Apache-2.0 |
 | Tesseract `eng` trained data | 4.0.0 | English OCR language data | Apache-2.0 |
 
-All runtime and language assets are served from this application's own static origin. They are loaded only after a payslip PDF requires OCR.
+All runtime and language assets are served from this application's own static origin. OCR assets are loaded only after a pension-report PDF requires local OCR.

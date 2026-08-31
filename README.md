@@ -73,4 +73,4 @@ Annual and quarterly reports use one semantic parser. It extracts balance, perso
 - Saved scenarios, salary growth, career breaks, investment allocation, retirement-age Explorer, coefficient controls, and personalized optimization remain deferred.
 - Taxes, benefit eligibility, provider-specific product rules, and stochastic simulation are outside the current model.
 
-See [docs/QA.md](docs/QA.md), [docs/SOURCES.md](docs/SOURCES.md), and [docs/THIRD_PARTY_NOTICES.md](docs/THIRD_PARTY_NOTICES.md) for evidence and dependencies.
+See [docs/QA.md](docs/QA.md), [docs/PR2-AUDIT-2026-08-31.md](docs/PR2-AUDIT-2026-08-31.md), [docs/RELEASE.md](docs/RELEASE.md), [docs/SOURCES.md](docs/SOURCES.md), and [docs/THIRD_PARTY_NOTICES.md](docs/THIRD_PARTY_NOTICES.md) for evidence, release operations, and dependencies.

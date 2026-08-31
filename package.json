@@ -2,6 +2,9 @@
   "name": "pension-lab",
   "version": "1.0.0",
   "private": true,
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "node scripts/build-dist.js",
     "build:standalone": "node scripts/build-standalone.js",
@@ -22,6 +25,7 @@
     "dataset:benchmark:text": "node scripts/dataset/evaluate-parser-text.js",
     "dataset:benchmark:compare": "node scripts/dataset/compare-pension-parser.js",
     "dataset:benchmark:browser": "node tests/dataset/browser-benchmark.test.js",
+    "verify:live": "node scripts/verify-live.js",
     "test:core": "npm run test:engine && npm run test:simulator && npm run test:documents && npm run test:ocr && npm run test:pension"
   }
 }

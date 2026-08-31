@@ -19,7 +19,7 @@ const scriptNames = [
 
 const html = fs.readFileSync(path.join(appRoot, 'index.html'), 'utf8');
 const css = fs.readFileSync(path.join(appRoot, 'styles.css'), 'utf8');
-const stylesheetPattern = /  <link rel="stylesheet" href="styles\.css"\s*\/>/;
+const stylesheetPattern = /  <link rel="stylesheet" href="styles\.css(?:\?[^"\s]*)?"\s*\/>/;
 
 let standalone = html.replace(stylesheetPattern, () => `  <style>\n${css}\n  </style>`);
 if (standalone === html) throw new Error('index.html stylesheet marker was not found.');
