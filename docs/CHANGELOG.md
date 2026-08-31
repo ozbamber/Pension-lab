@@ -8,6 +8,7 @@
 - Benchmarked and rejected both Hebrew-only OCR and official `tessdata_fast` models because their speed and payload gains caused material field, history, baseline, and routing regressions.
 - Expanded Chromium OCR coverage from 5 to 6 groups, including a painted 100% completion state and every progress mutation. The complete 34-document browser benchmark preserved all prior outputs exactly, 21/21 supported-new parent automatic acceptance, 100% critical automatic accuracy, and zero unsafe acceptances.
 - Recorded timings, payloads, rejected alternatives, safety results, and the remaining multi-page limitation in `docs/OCR-PERFORMANCE-2026-08-31.md`.
+- Released exact application commit `3e7618eb41251f6548b7b9f260af6836435fd351` through verified immutable Preview `a6382ee1-df8d-4032-be93-2d74e1e663b0` and Production `d259ab72-1999-4c59-a7ed-9a16ff216743`. The canonical site is `https://pension-lab-5yh.pages.dev/`; exact hashes, model-cache/redirect checks, rollback evidence, and live desktop/mobile/scanned-PDF Chromium results are recorded in `docs/QA.md`.
 
 ## Whole-product audit and production hardening — 2026-08-31
 
