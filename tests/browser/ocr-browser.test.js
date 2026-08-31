@@ -214,12 +214,19 @@ function assert(condition, message) { if (!condition) throw new Error(message); 
     await evaluate(cdp, 'window.PensionLabTest.reset()');
     await startProgressRecording(cdp);
     await setFile(cdp, scannedFixture);
-    await waitFor(() => evaluate(cdp, 'window.PensionLabTest.isReportProcessing()'), 5000, 'cancellable OCR processing');
+    await waitFor(() => evaluate(cdp, `(() => {
+      const title = document.getElementById('processingTitle').textContent;
+      const value = Number(document.getElementById('processingTrack').getAttribute('aria-valuenow'));
+      return window.PensionLabTest.isReportProcessing() && title === 'מזהים טקסט בדוח…' && value >= 42 && value < 100;
+    })()`), 30000, 'active OCR recognition');
     const restartedProgress = (await progressEvents(cdp)).filter((event) => event.active);
     assert(restartedProgress.length >= 1, 'A new OCR upload did not expose a progress update.');
     assert(restartedProgress[0].ariaValue < 100 && restartedProgress[0].barWidth < 100, 'A new OCR upload reused the previous completed progress.');
+    const activeCancelStartedAt = Date.now();
     await evaluate(cdp, 'document.getElementById("cancelProcessing").click()');
-    await waitFor(async () => !(await evaluate(cdp, 'window.PensionLabTest.isReportProcessing()')), 30000, 'OCR cancellation');
+    await waitFor(async () => !(await evaluate(cdp, 'window.PensionLabTest.isReportProcessing()')), 3000, 'active OCR cancellation');
+    const activeCancelElapsed = Date.now() - activeCancelStartedAt;
+    assert(activeCancelElapsed < 1000, `Active OCR cancellation took ${activeCancelElapsed}ms instead of returning immediately.`);
     assert((await evaluate(cdp, 'window.PensionLabTest.getSelectedDocument("pensionReport")')) === null, 'Cancellation imported a partial document.');
     assert((await evaluate(cdp, 'document.getElementById("processingTrack").getAttribute("aria-valuenow")')) === '0', 'Cancellation did not reset the inactive progressbar state.');
     assert((await evaluate(cdp, 'document.getElementById("pensionReportStatus").textContent')) === 'העיבוד בוטל.', 'Cancellation left a stale processing status.');
@@ -251,7 +258,7 @@ function assert(condition, message) { if (!condition) throw new Error(message); 
     assert((await evaluate(cdp, 'document.getElementById("pensionReportStatus").textContent')) === 'העיבוד בוטל.', 'Cold OCR cancellation left a stale processing status.');
     await waitFor(() => evaluate(cdp, 'window.__lateOcrWorkerTerminated'), 5000, 'late OCR worker cleanup');
     assert((await evaluate(cdp, 'window.PensionLabTest.getSelectedDocument("pensionReport")')) === null, 'Cold cancellation imported a partial document.');
-    console.log(`✓ warm and cold-start cancellation returned immediately, reset status/progress, and cleaned the late worker (${coldCancelElapsed}ms)`);
+    console.log(`✓ active-recognition and cold-start cancellation returned immediately, reset status/progress, and cleaned the late worker (${activeCancelElapsed}ms / ${coldCancelElapsed}ms)`);
 
     const missing = requests.filter((request) => request.status === 404);
     const browserErrors = cdp.events.filter((event) => event.method === 'Runtime.exceptionThrown' ||

@@ -2,7 +2,7 @@
 
 ## OCR performance and monotonic progress — 2026-08-31
 
-- Replaced per-pass 65%→95% resets with page-aware, stage-aware cumulative progress, a painted 100% completion state, correct retry/cancel reset, and accessible `progressbar` semantics. Cancellation now returns immediately during cold OCR initialization, reports the cancelled state, and terminates a worker that resolves late.
+- Replaced per-pass 65%→95% resets with page-aware, stage-aware cumulative progress, a painted 100% completion state, correct retry/cancel reset, and accessible `progressbar` semantics. Cancellation now races cold initialization, parameter changes, and active recognition; it reports the cancelled state, terminates the active worker, and cleans a worker that resolves late.
 - Assigned every existing image-OCR pass a stable per-page progress range while retaining the original single-render order, every pension-report OCR pass, and all fail-closed parsing rules.
 - Fingerprinted the two 13.1MB OCR language files, added a one-year immutable cache only for those exact paths, versioned Tesseract's public-model cache, and kept unversioned runtime assets revalidating.
 - Benchmarked and rejected both Hebrew-only OCR and official `tessdata_fast` models because their speed and payload gains caused material field, history, baseline, and routing regressions.

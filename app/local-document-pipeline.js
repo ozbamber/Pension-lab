@@ -211,8 +211,11 @@
           tessedit_char_whitelist: String(recognizeOptions.whitelist || ''),
         };
         try {
-          await worker.setParameters(parameters);
-          const result = await worker.recognize(canvas, { rotateAuto: false }, { text: true, blocks: true });
+          await awaitWithAbort(worker.setParameters(parameters), options.signal);
+          const result = await awaitWithAbort(
+            worker.recognize(canvas, { rotateAuto: false }, { text: true, blocks: true }),
+            options.signal,
+          );
           throwIfAborted(options.signal);
           const data = result && result.data ? result.data : {};
           return {
