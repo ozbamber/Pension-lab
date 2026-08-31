@@ -8,6 +8,7 @@
 - Improved focus/tick/progress contrast, cleared the upload input for same-file retries, and kept the central forecast announcement concise through a dedicated live region.
 - Added a Hebrew 404 page, static security headers, Node 22 runtime metadata, a redirect-intolerant deployed-byte verifier, an exact-SHA Cloudflare preview/production/rollback runbook that rejects untracked application files, and a complete audit register in `docs/PR2-AUDIT-2026-08-31.md`.
 - Corrected the third-party notice to describe the pension-report OCR path. The PR1 extraction and pension-report parser remain unchanged from the reviewed safety baseline.
+- Released exact application commit `3f5b469dea8f9c5cf6fb78817b8f147869a2eee2` through verified immutable Preview and Production deployments. The canonical site is `https://pension-lab-5yh.pages.dev/`; deployed hashes, headers, 404 behavior, and live desktop/mobile Chromium evidence are recorded in `docs/QA.md`.
 
 ## Synthetic PR2 review mode and UI audit — 2026-08-28
 

@@ -33,7 +33,18 @@ This review covers the complete PR2 product and production-release path on `code
 - Chromium verified visible validation/focus behavior, screen-reader percentage names and values for every range, non-color range status, bidi-safe signed deltas, keyboard symmetry, same-file upload retry, and no horizontal overflow at 390px.
 - `app/document-extraction.js` and `app/pension-report-parser.js` have an empty diff from reviewed PR1 safety SHA `f7978fe1a15c8e2f738ec0de629e77ff736ceabb`.
 - `git diff --check` passed. Two builds produced the same 224-file artifact and standalone SHA256 shown above; `_headers` and the custom Hebrew 404 page are present in `dist/`.
-- Live Preview and Production URL, deployment identifiers, exact Git SHA, HTTP/MIME/security-header/404 checks, and deployed-byte hashes are recorded below only after deployment verification; an upload alone is not counted as acceptance.
+- Live Preview and Production URL, deployment identifiers, exact Git SHA, HTTP/MIME/security-header/404 checks, and deployed-byte hashes are recorded below. An upload alone was not counted as acceptance.
+
+## 2026-08-31 live release evidence
+
+- Application source commit `3f5b469dea8f9c5cf6fb78817b8f147869a2eee2` was pushed to `origin/codex/pr2-interactive-simulator`. The tracked worktree and `app/` untracked-file check were clean; the unrelated root-level untracked dataset overlay remained outside staging and `dist/`.
+- Immutable Preview deployment `e63bc172-95fa-498e-a212-cd1e829ed637` at `https://e63bc172.pension-lab-5yh.pages.dev/` was verified at **2026-08-31T12:19:19.915Z**. Its branch alias is `https://codex-pr2-interactive-simula.pension-lab-5yh.pages.dev/`.
+- Production deployment `baeea5ab-faf0-4cd0-ae6e-725d5a894feb` at `https://baeea5ab.pension-lab-5yh.pages.dev/` was verified at **2026-08-31T12:27:19.238Z**. The canonical production URL `https://pension-lab-5yh.pages.dev/` was independently verified at **2026-08-31T12:27:20.180Z**.
+- Preview and Production used the same prebuilt `dist/` without an intervening rebuild. The deployed `index.html` SHA256 is `5D9E375605184452824FC4521178F9DE2C1EF844DA6797DD84E53AEC2AE7628C`; `app.js` is `1D7102DC47B8D3ADD55FF7E9D72EAA42BDA5121AE5E8D9EE57A7D2AA6D25EE23`; the standalone artifact remains `48FE2FC4300A6C91F6EE025D7258CDB9AB1A035215D2DE5D3ED765A89B0FBA48`.
+- Live verification confirmed exact local/deployed hashes for `index.html`, `app.js`, `engine.js`, `simulator.js`, `demo-fixture.js`, `styles.css`, and the custom 404 page; expected HTML/JavaScript/CSS MIME types; HTTP 404 for an unknown JavaScript asset; and no redirect hiding a wrong target.
+- Production sends `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, and `Permissions-Policy: camera=(), geolocation=(), microphone=(), payment=(), usb=()`.
+- Headless Chromium loaded both the normal and `?demo=1` flows from the immutable Preview and canonical Production URLs at **1440×1000** and **390×844**. The normal flow remained at upload, Demo exposed five finite controls, the result remained above controls on mobile, and there was no positive horizontal overflow, runtime/console/network-loading error, external request, or request caused by simulator interaction.
+- Cloudflare records Production source `3f5b469` under its `main` production label. This release did not merge or push the Git repository's `main` branch. The immediately preceding known Production rollback target is deployment `27647325-1d7d-4a6d-8406-480ec9bc1076` (`0387079`).
 
 ## PR2 visual and interaction review
 
